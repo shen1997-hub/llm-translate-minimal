@@ -34,6 +34,15 @@ export default defineBackground(() => {
           jsonFormatSupported,
         });
         port.postMessage(response);
+      } catch (e) {
+        // 兜底：任何意外异常（如 IndexedDB 故障）也必须回响应，保证每个请求恰好收到一个响应
+        port.postMessage({
+          kind: 'error',
+          taskId: msg.taskId,
+          chunkId: msg.chunkId,
+          code: 'failed',
+          message: e instanceof Error ? e.message : String(e),
+        } satisfies TranslateResponse);
       } finally {
         release();
       }
