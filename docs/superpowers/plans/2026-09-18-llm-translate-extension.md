@@ -588,7 +588,7 @@ export function browserIsVisible(el: Element): boolean {
 - [ ] **Step 4: 跑测试确认通过**
 
 Run: `npm test -- paragraphs`
-Expected: 10 passed
+Expected: 9 passed
 
 - [ ] **Step 5: Commit**
 
