@@ -22,6 +22,22 @@ describe('ensureHost', () => {
     expect(host.parentElement).toBe(li);
   });
 
+  it('grid 父容器：host 独占整行 (gridColumn: 1 / -1)', () => {
+    const d = doc('<div style="display:grid"><p>text</p></div>');
+    const p = d.querySelector('p')!;
+    const host = ensureHost(p, 'g1');
+    expect(host.style.gridColumn).toBe('1 / -1');
+  });
+
+  it('flex 父容器：host 独占整行 (flexShrink: 0)', () => {
+    const d = doc('<div style="display:flex"><p>text</p></div>');
+    const p = d.querySelector('p')!;
+    const host = ensureHost(p, 'f1');
+    expect(host.style.flexBasis).toBe('100%');
+    expect(host.style.width).toBe('100%');
+    expect(host.style.flexShrink).toBe('0');
+  });
+
   it('重复调用同 id 返回已有 host，不重复插入', () => {
     const d = doc('<div><p>text</p></div>');
     const p = d.querySelector('p')!;

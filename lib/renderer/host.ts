@@ -33,9 +33,13 @@ export function ensureHost(after: Element, hostId: string): HTMLElement {
     const parent = after.parentElement;
     if (parent) {
       const display = getComputedStyle(parent).display;
-      if (display.includes('flex') || display.includes('grid')) {
+      if (display.includes('grid')) {
+        host.style.gridColumn = '1 / -1';
+      }
+      if (display.includes('flex')) {
         host.style.flexBasis = '100%';
         host.style.width = '100%';
+        host.style.flexShrink = '0';
       }
       parent.insertBefore(host, after.nextSibling);
     }
