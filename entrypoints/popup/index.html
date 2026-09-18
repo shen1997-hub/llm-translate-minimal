@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8">
+<style>
+  body { font-family: system-ui, sans-serif; width: 280px; padding: 12px; }
+  button { width: 100%; padding: 8px; margin-top: 8px; cursor: pointer; }
+  #estimate, #progress, #message { font-size: 13px; color: #555; margin-top: 8px; }
+  #message.error { color: #e06c75; }
+  .row { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 13px; }
+  a { font-size: 12px; }
+</style></head>
+<body>
+  <div class="row"><input type="checkbox" id="site-toggle" checked><label for="site-toggle">在此站点启用</label></div>
+  <div id="estimate"></div>
+  <div id="progress"></div>
+  <button id="action">翻译本页</button>
+  <button id="grant" hidden>授权 API 域名</button>
+  <div id="message"></div>
+  <p><a href="#" id="open-options">打开设置页</a></p>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

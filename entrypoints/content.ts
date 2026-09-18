@@ -169,7 +169,14 @@ function isRetryChunk(chunkId: string): boolean {
 let starting = false;
 
 async function startTranslate(): Promise<void> {
-  if (task || starting) return; // 幂等
+  if (starting) return;
+  if (task) {
+    // 静默态（全部完成但留有失败段落）：start 视为「重试全部失败段落」
+    if (!task.cancelled && task.done >= task.total && task.pending.size === 0 && task.errors.size > 0) {
+      retryAllErrors();
+    }
+    return; // 任务运行中：幂等忽略
+  }
   starting = true;
   try {
     if (await currentHostBlacklisted()) return;
@@ -236,11 +243,32 @@ function onChunkResponse(msg: TranslateResponse): void {
     if (isRetryChunk(msg.chunkId)) {
       for (const t of msg.translations) task.errors.delete(t.paragraphId);
       // 静默态任务的最后一批失败段落重试成功：释放 task
-      if (task.done >= task.total && task.errors.size === 0) task = null;
+      if (task.done >= task.total && task.errors.size === 0) {
+        task = null;
+        notify({ kind: 'task-state', state: 'done' });
+      }
       return;
     }
   }
   if (!isRetryChunk(msg.chunkId)) completeChunk();
+}
+
+// 静默态重试全部失败段落（popup 再次点击「翻译本页」时触发）
+function retryAllErrors(): void {
+  if (!task) return;
+  notify({ kind: 'task-state', state: 'running' });
+  for (const pid of task.errors) {
+    const p = task.paragraphs.get(pid);
+    if (!p) { task.errors.delete(pid); continue; }
+    p.element.setAttribute(STATE_ATTR, 'pending');
+    const host = findHost(task, p.id);
+    if (host) setHostState(host, 'loading');
+    const req: TranslateRequest = {
+      kind: 'translate', taskId: task.id, chunkId: `retry-${pid}`,
+      units: [{ paragraphId: p.id, text: p.text, sliceIndex: 0, sliceTotal: 1 }],
+    };
+    sendChunk({ chunk: req, retries: 0, timer: null });
+  }
 }
 
 // 失败段落重试（事件委托：shadow 内 data-retry 按钮）
