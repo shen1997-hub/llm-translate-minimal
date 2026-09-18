@@ -1,4 +1,4 @@
 {
   "extends": "./.wxt/tsconfig.json",
-  "compilerOptions": { "strict": true }
+  "compilerOptions": { "strict": true, "types": ["chrome"] }
 }
