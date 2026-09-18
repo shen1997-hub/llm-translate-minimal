@@ -22,6 +22,7 @@ export function parseJsonResponse(content: string, expected: number): (string | 
   } catch {
     return null;
   }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
   const items = (parsed as { items?: unknown }).items;
   if (!Array.isArray(items)) return null;
   const result: (string | null)[] = new Array(expected).fill(null);

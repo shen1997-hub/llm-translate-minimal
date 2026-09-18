@@ -35,6 +35,11 @@ describe('parseJsonResponse', () => {
     const r = parseJsonResponse('{"items":[{"i":5,"t":"越界"},{"i":0,"t":"甲"}]}', 1);
     expect(r).toEqual(['甲']);
   });
+  it('非对象 JSON（null/数字/数组）返回 null 而非抛错', () => {
+    expect(parseJsonResponse('null', 1)).toBeNull();
+    expect(parseJsonResponse('42', 1)).toBeNull();
+    expect(parseJsonResponse('[1,2]', 1)).toBeNull();
+  });
 });
 
 describe('parsePlainResponse', () => {
