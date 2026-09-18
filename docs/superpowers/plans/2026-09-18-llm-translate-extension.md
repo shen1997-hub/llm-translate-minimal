@@ -1654,7 +1654,7 @@ export function removeAllHosts(root: ParentNode): void {
 - [ ] **Step 4: 跑测试确认通过**
 
 Run: `npm test -- host`
-Expected: 6 passed（jsdom 的 `getComputedStyle` 对未指定 display 的父元素返回空串，`includes` 安全）
+Expected: 5 passed（jsdom 的 `getComputedStyle` 对未指定 display 的父元素返回空串，`includes` 安全）
 
 - [ ] **Step 5: Commit**
 
