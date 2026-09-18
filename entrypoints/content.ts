@@ -25,6 +25,7 @@ interface Task {
   pending: Map<string, PendingEntry>;
   sliceBuffers: Map<string, { total: number; parts: string[] }>;
   paragraphs: Map<string, Paragraph>;
+  errors: Set<string>;
   observer: MutationObserver | null;
 }
 
@@ -129,7 +130,7 @@ function onChunkTimeout(chunkId: string): void {
   // 重发耗尽：该分块按失败处理
   task.pending.delete(chunkId);
   markChunkError(entry.chunk);
-  completeChunk();
+  if (!isRetryChunk(chunkId)) completeChunk();
 }
 
 function findHost(t: Task, paragraphId: string): HTMLElement | null {
@@ -141,6 +142,7 @@ function markChunkError(chunk: TranslateRequest): void {
   for (const u of chunk.units) {
     const p = task.paragraphs.get(u.paragraphId);
     if (p) {
+      task.errors.add(u.paragraphId);
       p.element.setAttribute(STATE_ATTR, 'error');
       const host = findHost(task, u.paragraphId);
       if (host) setHostState(host, 'error');
@@ -155,8 +157,13 @@ function completeChunk(): void {
   if (task.done >= task.total) {
     notify({ kind: 'task-state', state: 'done' });
     stopObserverOnly();
-    task = null;
+    // 仍有失败段落时保留 task（静默态），供重试按钮继续工作
+    if (task.errors.size === 0) task = null;
   }
+}
+
+function isRetryChunk(chunkId: string): boolean {
+  return chunkId.startsWith('retry-');
 }
 
 let starting = false;
@@ -175,6 +182,7 @@ async function startTranslate(): Promise<void> {
       id, cancelled: false, total: chunks.length, done: 0,
       pending: new Map(), sliceBuffers: new Map(),
       paragraphs: new Map(paragraphs.map(p => [p.id, p])),
+      errors: new Set(),
       observer: null,
     };
     notify({ kind: 'task-state', state: 'running' });
@@ -207,7 +215,7 @@ function onChunkResponse(msg: TranslateResponse): void {
   if (msg.kind === 'error') {
     if (msg.code === 'auth') {
       notify({ kind: 'task-state', state: 'error', message: msg.message });
-      cancelTask();
+      cancelTask({ silent: true });
       return;
     }
     markChunkError(entry.chunk);
@@ -225,8 +233,14 @@ function onChunkResponse(msg: TranslateResponse): void {
         }
       }
     }
+    if (isRetryChunk(msg.chunkId)) {
+      for (const t of msg.translations) task.errors.delete(t.paragraphId);
+      // 静默态任务的最后一批失败段落重试成功：释放 task
+      if (task.done >= task.total && task.errors.size === 0) task = null;
+      return;
+    }
   }
-  completeChunk();
+  if (!isRetryChunk(msg.chunkId)) completeChunk();
 }
 
 // 失败段落重试（事件委托：shadow 内 data-retry 按钮）
@@ -238,6 +252,9 @@ document.addEventListener('click', (e) => {
   const pid = host?.getAttribute(HOST_ATTR)?.split('/')[1];
   const p = pid ? task.paragraphs.get(pid) : undefined;
   if (!p) return;
+  p.element.setAttribute(STATE_ATTR, 'pending');
+  const host2 = findHost(task, p.id);
+  if (host2) setHostState(host2, 'loading');
   const req: TranslateRequest = {
     kind: 'translate', taskId: task.id, chunkId: `retry-${pid}`,
     units: [{ paragraphId: p.id, text: p.text, sliceIndex: 0, sliceTotal: 1 }],
@@ -245,16 +262,17 @@ document.addEventListener('click', (e) => {
   sendChunk({ chunk: req, retries: 0, timer: null });
 }, true);
 
-function cancelTask(): void {
+function cancelTask(opts?: { silent?: boolean }): void {
   if (!task) return;
   task.cancelled = true;
   for (const entry of task.pending.values()) {
     if (entry.timer !== null) clearTimeout(entry.timer);
   }
   task.pending.clear();
+  task.errors.clear();
   stopObserverOnly();
   task = null;
-  notify({ kind: 'task-state', state: 'idle' });
+  if (!opts?.silent) notify({ kind: 'task-state', state: 'idle' });
 }
 
 function clearAll(): void {
@@ -282,25 +300,34 @@ function isSelfMutation(m: MutationRecord): boolean {
     n instanceof Element && (n.hasAttribute(HOST_ATTR) || n.querySelector(`[${HOST_ATTR}]`) !== null));
 }
 
+let extracting = false;
+let incSeq = 0;
+
 async function onNewContent(): Promise<void> {
-  if (!task || task.cancelled) return;
-  const fresh = await collectParagraphs();
-  if (!task || task.cancelled || fresh.length === 0) return;
-  const chunks = buildChunks(fresh.map(p => ({ id: p.id, text: p.text })), 1500);
-  task.total += chunks.length;
-  for (const p of fresh) {
-    task.paragraphs.set(p.id, p);
-    p.element.setAttribute(STATE_ATTR, 'pending');
-    ensureHost(p.element, hostId(task.id, p.id));
+  if (!task || task.cancelled || extracting) return;
+  extracting = true;
+  try {
+    const fresh = await collectParagraphs();
+    if (!task || task.cancelled || fresh.length === 0) return;
+    const chunks = buildChunks(fresh.map(p => ({ id: p.id, text: p.text })), 1500);
+    task.total += chunks.length;
+    for (const p of fresh) {
+      task.paragraphs.set(p.id, p);
+      p.element.setAttribute(STATE_ATTR, 'pending');
+      ensureHost(p.element, hostId(task.id, p.id));
+    }
+    const batch = incSeq++;
+    chunks.forEach((chunk, i) => {
+      const req: TranslateRequest = {
+        kind: 'translate', taskId: task!.id, chunkId: `c-inc-${batch}-${i}`,
+        units: chunk.units.map(u => ({ paragraphId: u.paragraphId, text: u.text, sliceIndex: u.sliceIndex, sliceTotal: u.sliceTotal })),
+      };
+      sendChunk({ chunk: req, retries: 0, timer: null });
+    });
+    notify({ kind: 'progress', done: task.done, total: task.total });
+  } finally {
+    extracting = false;
   }
-  chunks.forEach((chunk, i) => {
-    const req: TranslateRequest = {
-      kind: 'translate', taskId: task!.id, chunkId: `c-inc-${Date.now()}-${i}`,
-      units: chunk.units.map(u => ({ paragraphId: u.paragraphId, text: u.text, sliceIndex: u.sliceIndex, sliceTotal: u.sliceTotal })),
-    };
-    sendChunk({ chunk: req, retries: 0, timer: null });
-  });
-  notify({ kind: 'progress', done: task.done, total: task.total });
 }
 
 function stopObserverOnly(): void {
