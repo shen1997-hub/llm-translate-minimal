@@ -3,15 +3,17 @@ export interface Chunk { units: ChunkUnit[]; charCount: number }
 
 const SENTENCE_END_RE = /[.!?;]\s/g;
 
+function hardCut(text: string, maxChars: number): string[] {
+  const slices: string[] = [];
+  for (let i = 0; i < text.length; i += maxChars) slices.push(text.slice(i, i + maxChars));
+  return slices;
+}
+
 export function splitIntoSlices(text: string, maxChars: number): string[] {
   if (text.length <= maxChars) return [text];
   const boundaries: number[] = [];
   for (const m of text.matchAll(SENTENCE_END_RE)) boundaries.push(m.index! + m[0].length);
-  if (boundaries.length === 0) {
-    const slices: string[] = [];
-    for (let i = 0; i < text.length; i += maxChars) slices.push(text.slice(i, i + maxChars));
-    return slices;
-  }
+  if (boundaries.length === 0) return hardCut(text, maxChars);
   const slices: string[] = [];
   let start = 0;
   let lastBoundary = 0;
@@ -24,13 +26,14 @@ export function splitIntoSlices(text: string, maxChars: number): string[] {
   }
   if (start < text.length) slices.push(text.slice(start));
   // 单片仍超限时硬切
-  return slices.flatMap(s => (s.length <= maxChars ? [s] : splitIntoSlices(s, maxChars)));
+  return slices.flatMap(s => (s.length <= maxChars ? [s] : hardCut(s, maxChars)));
 }
 
 export function buildChunks(paragraphs: { id: string; text: string }[], maxChars = 1500): Chunk[] {
   const chunks: Chunk[] = [];
   let current: Chunk = { units: [], charCount: 0 };
   for (const p of paragraphs) {
+    if (p.text.length === 0) continue;
     const slices = splitIntoSlices(p.text, maxChars);
     for (let s = 0; s < slices.length; s++) {
       const unit: ChunkUnit = { paragraphId: p.id, text: slices[s], sliceIndex: s, sliceTotal: slices.length };

@@ -22,6 +22,14 @@ describe('buildChunks', () => {
     expect(order).toEqual(['p0', 'p1', 'p2', 'p3', 'p4', 'p5']);
   });
 
+  it('空文本段落不产生任何 unit', () => {
+    const chunks = buildChunks([{ id: 'p0', text: '' }, { id: 'p1', text: 'hello' }], 100);
+    const units = chunks.flatMap(c => c.units);
+    expect(units).toHaveLength(1);
+    expect(units[0].paragraphId).toBe('p1');
+    expect(units.every(u => u.text.length > 0)).toBe(true);
+  });
+
   it('超长段落按句子边界分片，共享 paragraphId 与 sliceTotal', () => {
     const sentence = 'This is one complete sentence. ';
     const long = sentence.repeat(10); // 310 字符
@@ -43,5 +51,11 @@ describe('splitIntoSlices', () => {
   it('无句子边界时硬切', () => {
     const slices = splitIntoSlices('x'.repeat(250), 100);
     expect(slices.map(s => s.length)).toEqual([100, 100, 50]);
+  });
+  it('首个句子边界超过 maxChars 时硬切且不爆栈', () => {
+    const text = 'a'.repeat(200) + '. ';
+    const slices = splitIntoSlices(text, 100);
+    expect(slices.map(s => s.length)).toEqual([100, 100, 2]);
+    expect(slices.join('')).toBe(text);
   });
 });
