@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>LLM Translate 设置</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 640px; margin: 24px auto; padding: 0 16px; }
+  label { display: block; margin-top: 12px; font-weight: 600; }
+  input, textarea, select { width: 100%; box-sizing: border-box; padding: 6px; margin-top: 4px; }
+  textarea { min-height: 80px; }
+  .row { display: flex; gap: 12px; } .row > div { flex: 1; }
+  #status { margin-top: 12px; color: #2a7; }
+  #perm-status { font-weight: 400; margin-left: 8px; }
+</style></head>
+<body>
+  <h1>LLM Translate 设置</h1>
+  <label>API Base URL <input id="baseUrl" placeholder="https://api.deepseek.com"></label>
+  <label>API Key <input id="apiKey" type="password"></label>
+  <label>模型名 <input id="model" placeholder="deepseek-chat"></label>
+  <label>系统提示词 <textarea id="systemPrompt"></textarea></label>
+  <div class="row">
+    <div><label>目标语言 <input id="targetLang"></label></div>
+    <div><label>最短段落长度 <input id="minLength" type="number"></label></div>
+    <div><label>中文占比阈值 <input id="cjkRatioThreshold" type="number" step="0.05" min="0" max="1"></label></div>
+  </div>
+  <label>网站黑名单（每行一个域名）<textarea id="blacklist"></textarea></label>
+  <p><button id="save">保存</button>
+     <button id="grant">授权访问 API 域名</button><span id="perm-status"></span></p>
+  <p id="status"></p>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>
