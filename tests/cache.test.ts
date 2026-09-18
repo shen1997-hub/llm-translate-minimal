@@ -37,4 +37,15 @@ describe('evictIfNeeded', () => {
     expect(await getCached('k2')).toBeUndefined();
     expect(await getCached('k4')).toBe('v4');
   });
+  it('未超条数但超字节上限时按 LRU 淘汰', async () => {
+    for (let i = 0; i < 5; i++) {
+      await setCached(`b${i}`, 'x'.repeat(10), { model: 'm', promptVersion: 'v1' }); // 每条 20 字节
+      await new Promise(r => setTimeout(r, 2));
+    }
+    await evictIfNeeded(1000, 60); // 条数远未超限，但累计 100 字节 > 60
+    expect(await getCached('b0')).toBeUndefined();
+    expect(await getCached('b1')).toBeUndefined();
+    expect(await getCached('b2')).toBe('x'.repeat(10));
+    expect(await getCached('b4')).toBe('x'.repeat(10));
+  });
 });
