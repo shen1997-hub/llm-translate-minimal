@@ -42,9 +42,10 @@ export function parsePlainResponse(content: string, expected: number): (string |
   if (marks.length === 0) return null;
   const result: (string | null)[] = new Array(expected).fill(null);
   for (let k = 0; k < marks.length; k++) {
-    const i = Number(marks[k][1]);
-    const start = marks[k].index! + marks[k][0].length;
-    const end = k + 1 < marks.length ? marks[k + 1].index! : content.length;
+    const m = marks[k]!;
+    const i = Number(m[1]);
+    const start = m.index! + m[0].length;
+    const end = k + 1 < marks.length ? marks[k + 1]!.index! : content.length;
     if (Number.isInteger(i) && i >= 0 && i < expected) {
       result[i] = content.slice(start, end).trim();
     }

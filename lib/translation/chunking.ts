@@ -36,7 +36,7 @@ export function buildChunks(paragraphs: { id: string; text: string }[], maxChars
     if (p.text.length === 0) continue;
     const slices = splitIntoSlices(p.text, maxChars);
     for (let s = 0; s < slices.length; s++) {
-      const unit: ChunkUnit = { paragraphId: p.id, text: slices[s], sliceIndex: s, sliceTotal: slices.length };
+      const unit: ChunkUnit = { paragraphId: p.id, text: slices[s]!, sliceIndex: s, sliceTotal: slices.length };
       if (current.units.length > 0 && current.charCount + unit.text.length > maxChars) {
         chunks.push(current);
         current = { units: [], charCount: 0 };

@@ -4,14 +4,14 @@ import { buildMessages, parseJsonResponse, parsePlainResponse } from '../lib/tra
 describe('buildMessages', () => {
   it('json 模式要求 JSON 结构，plain 模式要求 [i] 编号', () => {
     const json = buildMessages(['Hello world here'], '中文', 'SYS', 'json');
-    expect(json[0].role).toBe('system');
-    expect(json[0].content).toContain('SYS');
-    expect(json[0].content).toContain('中文');
-    expect(json[0].content).toContain('"items"');
-    expect(json[1].content).toBe('[0] Hello world here');
+    expect(json[0]!.role).toBe('system');
+    expect(json[0]!.content).toContain('SYS');
+    expect(json[0]!.content).toContain('中文');
+    expect(json[0]!.content).toContain('"items"');
+    expect(json[1]!.content).toBe('[0] Hello world here');
     const plain = buildMessages(['Hello world here'], '中文', 'SYS', 'plain');
-    expect(plain[0].content).toContain('[0]');
-    expect(plain[0].content).not.toContain('"items"');
+    expect(plain[0]!.content).toContain('[0]');
+    expect(plain[0]!.content).not.toContain('"items"');
   });
 });
 

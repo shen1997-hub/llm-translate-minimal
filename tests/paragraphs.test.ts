@@ -15,7 +15,7 @@ describe('extractParagraphs', () => {
     const r = root(`<p>${LONG}</p><h2>A long enough english heading for test</h2><p>${LONG}</p>`);
     const ps = extractParagraphs(r, OPTS, visible);
     expect(ps.map(p => p.id)).toEqual(['p0', 'p1', 'p2']);
-    expect(ps[1].element.tagName).toBe('H2');
+    expect(ps[1]!.element.tagName).toBe('H2');
   });
 
   it('嵌套候选去重：blockquote>p 与 li>p 只提取一次（取内层）', () => {
@@ -54,7 +54,7 @@ describe('extractParagraphs', () => {
   it('textContent 空白折叠', () => {
     const r = root(`<p>This  is   a\n\n long   enough   english   paragraph   with   weird   spacing.</p>`);
     const ps = extractParagraphs(r, OPTS, visible);
-    expect(ps[0].text).toBe('This is a long enough english paragraph with weird spacing.');
+    expect(ps[0]!.text).toBe('This is a long enough english paragraph with weird spacing.');
   });
 });
 

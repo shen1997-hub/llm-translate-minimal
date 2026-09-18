@@ -1,4 +1,4 @@
-import { buildMessages, parseJsonResponse, parsePlainResponse, ChatMessage } from './prompt';
+import { buildMessages, parseJsonResponse, parsePlainResponse, type ChatMessage } from './prompt';
 
 export interface LlmConfig { baseUrl: string; apiKey: string; model: string }
 
@@ -32,7 +32,7 @@ async function chatCompletion(cfg: LlmConfig, messages: ChatMessage[], useJsonFo
       throw new Error(`LLM bad request: ${text}`);
     }
     if ((res.status === 429 || res.status >= 500) && attempt < RETRY_DELAYS.length) {
-      await sleep(RETRY_DELAYS[attempt]);
+      await sleep(RETRY_DELAYS[attempt]!);
       continue;
     }
     throw new Error(`LLM request failed: ${res.status}`);
@@ -44,7 +44,8 @@ async function translateSingle(cfg: LlmConfig, text: string, opts: { targetLang:
     const content = await chatCompletion(cfg, buildMessages([text], opts.targetLang, opts.systemPrompt, useJsonFormat ? 'json' : 'plain'), useJsonFormat, deps);
     const parsed = useJsonFormat ? parseJsonResponse(content, 1) : parsePlainResponse(content, 1);
     return parsed?.[0] ?? null;
-  } catch {
+  } catch (e) {
+    if (e instanceof AuthError) throw e;
     return null;
   }
 }
@@ -72,7 +73,7 @@ export async function translateUnits(
   // 缺项/解析失败 → 逐段补齐
   for (let i = 0; i < translations.length; i++) {
     if (translations[i] === null) {
-      translations[i] = await translateSingle(cfg, texts[i], opts, mode, deps);
+      translations[i] = await translateSingle(cfg, texts[i]!, opts, mode, deps);
     }
   }
   return { translations, useJsonFormat: mode };

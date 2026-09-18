@@ -41,6 +41,14 @@ describe('translateUnits', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(3);
   });
 
+  it('逐段补齐遇 401 时抛 AuthError 而非吞掉', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse('{"items":[{"i":0,"t":"甲"}]}'))
+      .mockResolvedValueOnce(new Response('unauthorized', { status: 401 })) as any;
+    await expect(translateUnits(CFG, ['A', 'B'], OPTS, { fetchImpl, sleep: noSleep })).rejects.toBeInstanceOf(AuthError);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
   it('429 退避重试后成功', async () => {
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce(new Response('rate limited', { status: 429 }))

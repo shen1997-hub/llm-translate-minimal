@@ -10,8 +10,8 @@ describe('buildChunks', () => {
     ];
     const chunks = buildChunks(ps, 200);
     expect(chunks).toHaveLength(2);
-    expect(chunks[0].units.map(u => u.paragraphId)).toEqual(['p0', 'p1']);
-    expect(chunks[1].units.map(u => u.paragraphId)).toEqual(['p2']);
+    expect(chunks[0]!.units.map(u => u.paragraphId)).toEqual(['p0', 'p1']);
+    expect(chunks[1]!.units.map(u => u.paragraphId)).toEqual(['p2']);
     for (const c of chunks) expect(c.charCount).toBeLessThanOrEqual(200);
   });
 
@@ -26,7 +26,7 @@ describe('buildChunks', () => {
     const chunks = buildChunks([{ id: 'p0', text: '' }, { id: 'p1', text: 'hello' }], 100);
     const units = chunks.flatMap(c => c.units);
     expect(units).toHaveLength(1);
-    expect(units[0].paragraphId).toBe('p1');
+    expect(units[0]!.paragraphId).toBe('p1');
     expect(units.every(u => u.text.length > 0)).toBe(true);
   });
 
