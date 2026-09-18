@@ -21,7 +21,7 @@
 - 段落处理标记用 DOM 属性 `data-llm-translate-state`（`pending`/`done`/`error`），不用内存 WeakSet
 - TDD：`lib/` 下所有纯逻辑先写失败测试再实现；可见性判断必须依赖注入（jsdom 无 `innerText`）
 - 提取器一律基于 `textContent`（jsdom 未实现 `innerText`）
-- 每任务结束提交一次 commit，message 用 `feat:`/`test:`/`chore:` 前缀
+- 每任务结束提交一次 commit，message 用 `feat:`/`test:`/`chore:`/`fix:` 前缀
 
 ## File Structure
 
