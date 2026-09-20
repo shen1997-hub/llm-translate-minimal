@@ -40,7 +40,7 @@ export async function handleTranslateRequest(req: TranslateRequest, deps: Schedu
         useJsonFormat: deps.jsonFormatSupported.value,
         sourceLang: settings.sourceLang,
       });
-      if (!r.useJsonFormat) deps.jsonFormatSupported.value = false;
+      if (!r.useJsonFormat && provider.protocol !== 'claude') deps.jsonFormatSupported.value = false;
       for (let k = 0; k < pendingIdx.length; k++) {
         translations[pendingIdx[k]!] = r.translations[k] ?? null;
       }

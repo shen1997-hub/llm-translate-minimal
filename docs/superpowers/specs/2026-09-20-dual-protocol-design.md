@@ -34,7 +34,7 @@ body: { model, max_tokens: 4096, system: <systemPrompt>,
 
 - prompt 层 `buildMessages` 返回 `[{role:'system'...},{role:'user'...}]`；Claude transport 拆出 system 字段，user 消息原样放入 messages
 - Claude 无 `response_format` 等价物 → 永远 plain 模式：`translateUnits` 入口若 `cfg.protocol === 'claude'` 强制 `mode = false`，不读不写 `jsonFormatSupported`
-- 400 错误：Claude 无 JSON 降级需求，直接抛 `LLM bad request`
+- 400 错误：Claude 无 JSON 降级需求，直接抛 `LLM request failed: 400: {body}`
 
 `translateUnits` 的逐段补齐、解析（`parseJsonResponse`/`parsePlainResponse`）两协议完全复用。
 

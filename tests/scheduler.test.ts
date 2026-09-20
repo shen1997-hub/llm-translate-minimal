@@ -142,4 +142,26 @@ describe('handleTranslateRequest', () => {
     await handleTranslateRequest(REQ, deps);
     expect((deps.translate as any).mock.calls[0][0].protocol).toBe('claude');
   });
+
+  it('claude 供应商恒 plain 返回不翻转 jsonFormatSupported', async () => {
+    const deps = makeDeps({
+      getSettings: vi.fn(async () => ({
+        providers: [{
+          id: 'pv-1', name: 'Claude', protocol: 'claude', baseUrl: 'https://api.anthropic.com',
+          apiKey: 'sk-ant', models: ['claude-x'], activeModel: 'claude-x',
+        }],
+        activeProviderId: 'pv-1', sourceLang: 'auto',
+        systemPrompt: 'SYS', targetLang: '中文',
+        blacklist: [], disabledSites: [], minLength: 20, cjkRatioThreshold: 0.3,
+        baseUrl: '', apiKey: '', model: '',
+      })) as any,
+      translate: vi.fn(async (_cfg: any, texts: string[]) => ({
+        translations: texts.map(t => `译:${t}`),
+        useJsonFormat: false,
+      })),
+    });
+    const r = await handleTranslateRequest(REQ, deps);
+    expect(r.kind).toBe('result');
+    expect(deps.jsonFormatSupported.value).toBe(true);
+  });
 });
