@@ -1,7 +1,13 @@
 {
   "name": "llm-translate-extension",
-  "private": true,
   "version": "0.1.0",
+  "description": "基于大语言模型的网页翻译浏览器扩展：整页双语对照 + 划词翻译，支持任意 OpenAI 兼容 API",
+  "license": "MIT",
+  "author": "shen1997-hub",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shen1997-hub/llm-translate-extension"
+  },
   "type": "module",
   "scripts": {
     "dev": "wxt",
