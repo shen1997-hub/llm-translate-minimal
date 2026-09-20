@@ -6,9 +6,12 @@ const HOST = '[data-llm-translate-host]';
 const PAGE_URL = `${STUB_ORIGIN}/page`;
 
 const BASE_SETTINGS = {
-  baseUrl: STUB_ORIGIN,
-  apiKey: 'sk-test',
-  model: 'm1',
+  providers: [{
+    id: 'pv-1', name: 'Stub', baseUrl: STUB_ORIGIN,
+    apiKey: 'sk-test', models: ['m1'], activeModel: 'm1',
+  }],
+  activeProviderId: 'pv-1',
+  sourceLang: 'auto',
   systemPrompt: 'SYS',
   targetLang: '中文',
   blacklist: [],
