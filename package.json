@@ -6,7 +6,7 @@
   "author": "shen1997-hub",
   "repository": {
     "type": "git",
-    "url": "https://github.com/shen1997-hub/llm-translate-extension"
+    "url": "https://github.com/shen1997-hub/llm-translate-minimal"
   },
   "type": "module",
   "scripts": {

@@ -18,8 +18,8 @@
 ### 从源码构建（开发者）
 
 ```bash
-git clone <repo-url>
-cd translate
+git clone https://github.com/shen1997-hub/llm-translate-minimal.git
+cd llm-translate-minimal
 npm install
 npm run build        # 产物在 .output/chrome-mv3
 ```
