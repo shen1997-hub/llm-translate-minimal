@@ -412,6 +412,14 @@ function notify(msg: unknown): void {
   chrome.runtime.sendMessage(msg).catch(() => { /* popup 未打开时忽略 */ });
 }
 
+function armSelTimer(): void {
+  if (selTimer !== null) clearTimeout(selTimer);
+  selTimer = setTimeout(() => {
+    selTimer = null;
+    selUI?.setPanelState('error', '翻译超时，请重试');
+  }, CHUNK_TIMEOUT_MS);
+}
+
 function initSelectionTranslate(): void {
   selUI = createSelectionUI(document, {
     onDotClick: () => void onSelDotClick(),
@@ -420,6 +428,7 @@ function initSelectionTranslate(): void {
       if (!selReq) return;
       selUI?.setPanelState('loading');
       postToPort(selReq);
+      armSelTimer();
     },
     onCopy: (text) => { void navigator.clipboard.writeText(text).catch(() => {}); },
     onSpeak: (text) => {
@@ -476,9 +485,5 @@ async function onSelDotClick(): Promise<void> {
     targetLang: cjkRatio(text) > 0.5 ? 'English' : s.targetLang,
   };
   postToPort(selReq);
-  if (selTimer !== null) clearTimeout(selTimer);
-  selTimer = setTimeout(() => {
-    selTimer = null;
-    selUI?.setPanelState('error', '翻译超时，请重试');
-  }, CHUNK_TIMEOUT_MS);
+  armSelTimer();
 }
