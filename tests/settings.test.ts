@@ -19,7 +19,7 @@ const store = new Map<string, unknown>();
 beforeEach(() => store.clear());
 
 const PV: Provider = {
-  id: 'pv-1', name: 'DeepSeek', baseUrl: 'https://api.deepseek.com',
+  id: 'pv-1', name: 'DeepSeek', protocol: 'openai', baseUrl: 'https://api.deepseek.com',
   apiKey: 'sk-x', models: ['deepseek-chat', 'deepseek-reasoner'], activeModel: 'deepseek-chat',
 };
 
@@ -56,6 +56,15 @@ describe('默认值与读写', () => {
   it('LANGUAGES 含简体中文与 English', () => {
     expect(LANGUAGES).toContain('简体中文');
     expect(LANGUAGES).toContain('English');
+  });
+
+  it('旧供应商数据无 protocol 字段时读取补 openai', async () => {
+    store.set('settings', {
+      providers: [{ id: 'p1', name: 'A', baseUrl: 'https://a.com', apiKey: 'k', models: ['m'], activeModel: 'm' }],
+      activeProviderId: 'p1',
+    });
+    const s = await getSettings();
+    expect(s.providers[0]!.protocol).toBe('openai');
   });
 });
 

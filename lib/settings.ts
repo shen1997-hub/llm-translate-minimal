@@ -1,6 +1,9 @@
+export type ApiProtocol = 'openai' | 'claude';
+
 export interface Provider {
   id: string;
   name: string;
+  protocol: ApiProtocol;
   baseUrl: string;
   apiKey: string;
   models: string[];
@@ -65,11 +68,13 @@ function inferProviderName(baseUrl: string): string {
 export async function getSettings(): Promise<Settings> {
   const stored = ((await chrome.storage.local.get(KEY))[KEY] ?? {}) as Partial<Settings>;
   const merged: Settings = { ...DEFAULT_SETTINGS, ...stored };
+  merged.providers = merged.providers.map(p => ({ ...p, protocol: p.protocol ?? ('openai' as ApiProtocol) }));
   // 惰性迁移：旧单配置 → 单供应商。只认存储里真实存在的旧字段，纯默认值不触发
   if (merged.providers.length === 0 && (stored.baseUrl || stored.apiKey || stored.model)) {
     const legacy: Provider = {
       id: 'pv-legacy',
       name: inferProviderName(stored.baseUrl ?? ''),
+      protocol: 'openai' as ApiProtocol,
       baseUrl: stored.baseUrl ?? DEFAULT_SETTINGS.baseUrl,
       apiKey: stored.apiKey ?? '',
       models: stored.model ? [stored.model] : [],

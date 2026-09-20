@@ -12,6 +12,7 @@ function newProviderDraft(): Provider {
   return {
     id: `pv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     name: '', baseUrl: '', apiKey: '', models: [], activeModel: '',
+    protocol: 'openai',
   };
 }
 
