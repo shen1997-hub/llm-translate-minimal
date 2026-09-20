@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>E2E Test Article</title></head>
+<body>
+<nav><ul><li><a href="#">Navigation link one here</a></li></ul></nav>
+<article>
+  <p>This is the first sufficiently long English paragraph of the test article body.</p>
+  <p>This is the second sufficiently long English paragraph of the test article body.</p>
+  <button id="counter-btn" type="button">Increment</button>
+  <span id="counter">0</span>
+</article>
+<aside class="sidebar"><p>Sidebar content that should never be translated at all.</p></aside>
+<script>
+  document.getElementById('counter-btn').addEventListener('click', () => {
+    const c = document.getElementById('counter');
+    c.textContent = String(Number(c.textContent) + 1);
+  });
+</script>
+</body>
+</html>

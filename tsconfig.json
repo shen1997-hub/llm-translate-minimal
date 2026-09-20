@@ -1,4 +1,5 @@
 {
   "extends": "./.wxt/tsconfig.json",
-  "compilerOptions": { "strict": true, "types": ["chrome"] }
+  "compilerOptions": { "strict": true, "types": ["chrome"] },
+  "exclude": ["**/node_modules", ".output", "e2e", "playwright.config.ts"]
 }
