@@ -2,20 +2,26 @@ import type { TranslateRequest, TranslateResponse } from '../messaging/protocol'
 import { translateUnits, AuthError, type LlmConfig } from './llm-client';
 import { PROMPT_VERSION } from './prompt';
 import { cacheKey } from '../cache/store';
+import { getActiveProvider, resolveModel } from '../settings';
+import type { Settings } from '../settings';
 
 export interface SchedulerDeps {
   translate: typeof translateUnits;
   getCached: (key: string) => Promise<string | undefined>;
   setCached: (key: string, translation: string, meta: { model: string; promptVersion: string }) => Promise<void>;
-  getSettings: () => Promise<{ baseUrl: string; apiKey: string; model: string; systemPrompt: string; targetLang: string }>;
+  getSettings: () => Promise<Settings>;
   jsonFormatSupported: { value: boolean };
 }
 
 export async function handleTranslateRequest(req: TranslateRequest, deps: SchedulerDeps): Promise<TranslateResponse> {
   const settings = await deps.getSettings();
-  const cfg: LlmConfig = { baseUrl: settings.baseUrl, apiKey: settings.apiKey, model: settings.model };
+  const provider = getActiveProvider(settings);
+  if (!provider) {
+    return { kind: 'error', taskId: req.taskId, chunkId: req.chunkId, code: 'auth', message: '尚未配置 API 供应商，请前往设置页添加' };
+  }
+  const cfg: LlmConfig = { baseUrl: provider.baseUrl, apiKey: provider.apiKey, model: resolveModel(provider) };
   const texts = req.units.map(u => u.text);
-  const keys = texts.map(t => cacheKey(t, PROMPT_VERSION, settings.model, settings.targetLang));
+  const keys = texts.map(t => cacheKey(t, PROMPT_VERSION, cfg.model, settings.targetLang));
 
   const translations: (string | null)[] = new Array<string | null>(texts.length).fill(null);
   const pendingIdx: number[] = [];
@@ -31,6 +37,7 @@ export async function handleTranslateRequest(req: TranslateRequest, deps: Schedu
         targetLang: settings.targetLang,
         systemPrompt: settings.systemPrompt,
         useJsonFormat: deps.jsonFormatSupported.value,
+        sourceLang: settings.sourceLang,
       });
       if (!r.useJsonFormat) deps.jsonFormatSupported.value = false;
       for (let k = 0; k < pendingIdx.length; k++) {
@@ -49,7 +56,7 @@ export async function handleTranslateRequest(req: TranslateRequest, deps: Schedu
   }
 
   for (const i of pendingIdx) {
-    await deps.setCached(keys[i]!, translations[i]!, { model: settings.model, promptVersion: PROMPT_VERSION });
+    await deps.setCached(keys[i]!, translations[i]!, { model: cfg.model, promptVersion: PROMPT_VERSION });
   }
 
   return {

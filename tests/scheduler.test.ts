@@ -11,8 +11,15 @@ function makeDeps(overrides: Partial<SchedulerDeps> = {}): SchedulerDeps {
     getCached: vi.fn(async () => undefined),
     setCached: vi.fn(async () => {}),
     getSettings: vi.fn(async () => ({
-      baseUrl: 'https://api.test.com', apiKey: 'sk-x', model: 'm1',
+      providers: [{
+        id: 'pv-1', name: 'Test', baseUrl: 'https://api.test.com',
+        apiKey: 'sk-x', models: ['m1'], activeModel: 'm1',
+      }],
+      activeProviderId: 'pv-1',
+      sourceLang: 'auto',
       systemPrompt: 'SYS', targetLang: '中文',
+      blacklist: [], disabledSites: [], minLength: 20, cjkRatioThreshold: 0.3,
+      baseUrl: '', apiKey: '', model: '',
     })),
     jsonFormatSupported: { value: true },
     ...overrides,
@@ -78,5 +85,27 @@ describe('handleTranslateRequest', () => {
     });
     const r = await handleTranslateRequest(REQ, deps);
     expect(r).toMatchObject({ kind: 'error', code: 'failed' });
+  });
+
+  it('无供应商时返回 code=auth 且不调用 LLM', async () => {
+    const deps = makeDeps({
+      getSettings: vi.fn(async () => ({
+        providers: [], activeProviderId: '', sourceLang: 'auto',
+        systemPrompt: 'SYS', targetLang: '中文',
+        blacklist: [], disabledSites: [], minLength: 20, cjkRatioThreshold: 0.3,
+        baseUrl: '', apiKey: '', model: '',
+      })) as any,
+    });
+    const r = await handleTranslateRequest(REQ, deps);
+    expect(r).toMatchObject({ kind: 'error', code: 'auth' });
+    expect(deps.translate).not.toHaveBeenCalled();
+  });
+
+  it('使用解析后的供应商与模型，并透传 sourceLang', async () => {
+    const deps = makeDeps();
+    await handleTranslateRequest(REQ, deps);
+    const call = (deps.translate as any).mock.calls[0];
+    expect(call[0]).toEqual({ baseUrl: 'https://api.test.com', apiKey: 'sk-x', model: 'm1' });
+    expect(call[2].sourceLang).toBe('auto');
   });
 });
