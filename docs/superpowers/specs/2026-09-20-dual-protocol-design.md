@@ -99,6 +99,8 @@ interface ImportedProvider { name: string; protocol: ApiProtocol; baseUrl: strin
 ### 设置页 UI
 
 - 「翻译服务」卡片顶部加「从 CC Switch 导入」按钮 → 触发隐藏 `<input type="file" accept=".db">`
+- 按钮下方加一行说明文字（`.hint` 样式），告诉用户默认路径：
+  `CC Switch 数据库默认位于：Windows C:\Users\<用户名>\.cc-switch\cc-switch.db；macOS / Linux ~/.cc-switch/cc-switch.db`
 - 读取成功后弹出候选列表（复用设置页卡片样式）：每行 checkbox + 名称 + 协议徽标（Claude/OpenAI）+ baseUrl 摘要；「已存在」行禁用勾选
 - 「导入所选」→ 逐条 `saveProvider`（id 用 `pv-<时间戳>-<序号>`）；含 `isCurrent` 的条目导入后 `setActiveProvider`
 - 全程在 options 页完成，无新权限
