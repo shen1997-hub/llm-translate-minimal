@@ -34,7 +34,12 @@
   }
   .card .row + .row { border-top: 1px solid var(--border); }
   .card .label { color: var(--text-secondary); }
-  .card .value { color: var(--text); font-weight: 500; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lang-select {
+    max-width: 170px; padding: 5px 8px; border: 1px solid #dde1e7; border-radius: 8px;
+    font-size: 13px; background: #fafbfc; color: var(--text); font-family: inherit;
+  }
+  .lang-select:disabled { color: var(--text-secondary); }
+  .card .row .link { color: var(--primary); font-size: 13px; cursor: pointer; text-decoration: none; }
 
   /* iOS 风格开关 */
   .switch { position: relative; width: 42px; height: 24px; flex: none; }
@@ -64,13 +69,6 @@
   #action:hover { background: var(--primary-hover); }
   #action:disabled { background: #ccd1d9; cursor: not-allowed; }
 
-  #grant {
-    width: 100%; margin-top: 8px; padding: 10px; border: 1px solid var(--primary);
-    border-radius: 10px; cursor: pointer; background: #fff; color: var(--primary);
-    font-size: 13.5px; font-weight: 500;
-  }
-  #grant:hover { background: #fdeef4; }
-
   .chips { display: flex; gap: 10px; padding: 10px 12px 6px; }
   .chip {
     flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
@@ -94,8 +92,13 @@
   </div>
 
   <div class="card">
-    <div class="row"><span class="label">翻译模型</span><span class="value" id="model-name">-</span></div>
-    <div class="row"><span class="label">目标语言</span><span class="value" id="target-lang">-</span></div>
+    <div class="row"><span class="label">原文语言</span><select id="source-lang" class="lang-select"></select></div>
+    <div class="row"><span class="label">目标语言</span><select id="target-lang" class="lang-select"></select></div>
+  </div>
+
+  <div class="card">
+    <div class="row"><span class="label">翻译服务</span><select id="provider-select" class="lang-select"></select></div>
+    <div class="row"><span class="label">模型</span><select id="model-select" class="lang-select"></select></div>
     <div class="row">
       <span>在此站点启用</span>
       <label class="switch"><input type="checkbox" id="site-toggle" checked><span class="slider"></span></label>
@@ -108,7 +111,6 @@
 
   <div class="action-wrap">
     <button id="action">翻译本页</button>
-    <button id="grant" hidden>授权 API 域名</button>
   </div>
 
   <div class="chips">

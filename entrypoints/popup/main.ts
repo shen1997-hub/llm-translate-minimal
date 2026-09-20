@@ -1,4 +1,7 @@
-import { getSettings, saveSettings, apiOriginPattern } from '../../lib/settings';
+import {
+  getSettings, saveSettings, setActiveProvider, setActiveModel,
+  getActiveProvider, resolveModel, LANGUAGES,
+} from '../../lib/settings';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 let state: 'idle' | 'running' | 'done' | 'error' = 'idle';
@@ -28,29 +31,39 @@ async function refresh(): Promise<void> {
   currentTabId = tab.id;
   const host = new URL(tab.url).hostname;
   const s = await getSettings();
-  $('model-name').textContent = s.model || '-';
-  $('target-lang').textContent = s.targetLang || '-';
   const disabled = s.disabledSites.includes(host);
   ($('site-toggle') as HTMLInputElement).checked = !disabled;
 
-  if (!s.apiKey) { $('message').textContent = '请先在设置页填写 API Key'; $('message').className = 'error'; }
+  // 语言下拉
+  fillLangSelect($('source-lang') as HTMLSelectElement, ['自动检测', ...LANGUAGES], s.sourceLang === 'auto' ? '自动检测' : s.sourceLang);
+  fillLangSelect($('target-lang') as HTMLSelectElement, LANGUAGES, s.targetLang);
 
-  // baseUrl 非法时 apiOriginPattern 会抛错，不能让 popup 崩溃
-  let pattern: string | null;
-  try {
-    pattern = apiOriginPattern(s.baseUrl);
-  } catch {
-    pattern = null;
-  }
-  if (pattern === null) {
-    ($('grant') as HTMLButtonElement).hidden = true;
-    $('message').textContent = 'Base URL 格式无效，请前往设置页修正';
-    $('message').className = 'error';
+  // 供应商/模型两级下拉
+  const providerSelect = $('provider-select') as HTMLSelectElement;
+  const modelSelect = $('model-select') as HTMLSelectElement;
+  providerSelect.innerHTML = '';
+  if (s.providers.length === 0) {
+    const opt = document.createElement('option');
+    opt.textContent = '未配置，点击前往设置';
+    providerSelect.appendChild(opt);
+    providerSelect.disabled = true;
+    modelSelect.innerHTML = '';
+    modelSelect.disabled = true;
   } else {
-    const granted = await chrome.permissions.contains({ origins: [pattern] });
-    ($('grant') as HTMLButtonElement).hidden = granted;
-    if (!granted) $('message').textContent = 'API 域名未授权，点击「授权 API 域名」';
+    providerSelect.disabled = false;
+    modelSelect.disabled = false;
+    const active = getActiveProvider(s);
+    for (const p of s.providers) {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.name;
+      providerSelect.appendChild(opt);
+    }
+    providerSelect.value = active?.id ?? '';
+    fillModelSelect(modelSelect, active?.models ?? [], active ? resolveModel(active) : '');
   }
+
+  if (!getActiveProvider(s)?.apiKey) { $('message').textContent = '请先在设置页填写 API Key'; $('message').className = 'error'; }
 
   const probe = await chrome.tabs.sendMessage(tab.id, { kind: 'probe' }).catch(() => null);
   if (probe?.blacklisted) {
@@ -59,6 +72,35 @@ async function refresh(): Promise<void> {
     const tokens = Math.ceil(probe.chars / 3.5);
     $('estimate').textContent = `将翻译 ${probe.paragraphs} 段 / 约 ${tokens} tokens`;
   }
+}
+
+function fillLangSelect(select: HTMLSelectElement, options: string[], current: string): void {
+  select.innerHTML = '';
+  for (const label of options) {
+    const opt = document.createElement('option');
+    opt.value = label === '自动检测' ? 'auto' : label;
+    opt.textContent = label;
+    select.appendChild(opt);
+  }
+  // 旧数据自由文本（如「中文」）保留为可选项
+  if (current !== 'auto' && ![...select.options].some(o => o.value === current)) {
+    const opt = document.createElement('option');
+    opt.value = current;
+    opt.textContent = `${current}（自定义）`;
+    select.appendChild(opt);
+  }
+  select.value = current;
+}
+
+function fillModelSelect(select: HTMLSelectElement, models: string[], current: string): void {
+  select.innerHTML = '';
+  for (const m of models) {
+    const opt = document.createElement('option');
+    opt.value = m;
+    opt.textContent = m;
+    select.appendChild(opt);
+  }
+  select.value = current;
 }
 
 $('action').addEventListener('click', async () => {
@@ -75,19 +117,22 @@ $('action').addEventListener('click', async () => {
   }
 });
 
-$('grant').addEventListener('click', async () => {
+$('source-lang').addEventListener('change', async (e) => {
+  await saveSettings({ sourceLang: (e.target as HTMLSelectElement).value });
+});
+$('target-lang').addEventListener('change', async (e) => {
+  await saveSettings({ targetLang: (e.target as HTMLSelectElement).value });
+});
+$('provider-select').addEventListener('change', async (e) => {
+  const id = (e.target as HTMLSelectElement).value;
+  if (!id) return;
+  await setActiveProvider(id);
+  await refresh();
+});
+$('model-select').addEventListener('change', async (e) => {
   const s = await getSettings();
-  let pattern: string;
-  try {
-    pattern = apiOriginPattern(s.baseUrl);
-  } catch {
-    $('message').textContent = 'Base URL 格式无效，请前往设置页修正';
-    $('message').className = 'error';
-    return;
-  }
-  const granted = await chrome.permissions.request({ origins: [pattern] });
-  ($('grant') as HTMLButtonElement).hidden = granted;
-  $('message').textContent = granted ? '' : '授权被拒绝，翻译请求将被浏览器拦截';
+  const active = getActiveProvider(s);
+  if (active) await setActiveModel(active.id, (e.target as HTMLSelectElement).value);
 });
 
 $('site-toggle').addEventListener('change', async (e) => {
