@@ -3,75 +3,63 @@
 <head><meta charset="utf-8"><title>LLM Translate 设置</title>
 <style>
   :root {
-    --primary: #e91e63;
-    --primary-hover: #d81b60;
-    --bg: #f2f4f8;
-    --card: #ffffff;
-    --text: #333333;
-    --text-secondary: #999999;
-    --border: #eeeeee;
+    --primary: #e91e63; --primary-hover: #d81b60; --bg: #f2f4f8; --card: #ffffff;
+    --text: #333333; --text-secondary: #999999; --border: #eeeeee; --danger: #e06c75;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
-    background: var(--bg); color: var(--text); font-size: 14px;
-  }
+  body { font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); font-size: 14px; }
   .container { max-width: 640px; margin: 0 auto; padding: 24px 16px 48px; }
-
   .header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
-  .header .logo {
-    width: 32px; height: 32px; border-radius: 9px; background: var(--primary);
-    color: #fff; display: flex; align-items: center; justify-content: center;
-    font-size: 15px; font-weight: 700;
-  }
+  .header .logo { width: 32px; height: 32px; border-radius: 9px; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700; }
   .header h1 { font-size: 18px; font-weight: 600; }
-
   .card { background: var(--card); border-radius: 12px; padding: 6px 18px 14px; margin-bottom: 14px; }
   .card h2 { font-size: 13px; color: var(--text-secondary); font-weight: 500; padding: 12px 0 4px; }
-
   label { display: block; margin-top: 10px; font-size: 13.5px; font-weight: 500; }
-  input, textarea, select {
-    width: 100%; box-sizing: border-box; margin-top: 5px; padding: 9px 11px;
-    border: 1px solid #dde1e7; border-radius: 8px; font-size: 13.5px;
-    font-family: inherit; background: #fafbfc; color: var(--text);
-  }
-  input:focus, textarea:focus { outline: 2px solid #f8bbd0; border-color: var(--primary); }
+  input, textarea, select { width: 100%; box-sizing: border-box; margin-top: 5px; padding: 9px 11px; border: 1px solid #dde1e7; border-radius: 8px; font-size: 13.5px; font-family: inherit; background: #fafbfc; color: var(--text); }
+  input:focus, textarea:focus, select:focus { outline: 2px solid #f8bbd0; border-color: var(--primary); }
   textarea { min-height: 76px; resize: vertical; }
   .row { display: flex; gap: 12px; } .row > div { flex: 1; }
 
+  /* 供应商列表 */
+  .pv-row { display: flex; align-items: center; gap: 10px; padding: 12px 0; border-top: 1px solid var(--border); }
+  .pv-row:first-of-type { border-top: none; }
+  .pv-info { flex: 1; min-width: 0; }
+  .pv-name { font-weight: 600; font-size: 14px; }
+  .pv-sub { font-size: 12.5px; color: var(--text-secondary); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pv-badge { font-size: 11px; color: var(--primary); border: 1px solid var(--primary); border-radius: 6px; padding: 1px 6px; flex: none; }
+  .pv-actions { display: flex; gap: 6px; flex: none; }
+  .btn-text { border: none; background: none; color: var(--primary); font-size: 13px; cursor: pointer; padding: 4px 6px; border-radius: 6px; }
+  .btn-text:hover { background: #fdeef4; }
+  .btn-text.danger { color: var(--danger); }
+  .btn-text.danger:hover { background: #fdeeef; }
+  .pv-form { border-top: 1px dashed var(--border); padding: 4px 0 12px; }
+  .pv-form .form-actions { display: flex; gap: 10px; margin-top: 12px; }
+  .form-error { color: var(--danger); font-size: 12.5px; margin-top: 8px; }
+  #add-provider { width: 100%; margin-top: 12px; padding: 9px; border: 1px dashed #ccd1d9; border-radius: 8px; background: none; color: var(--text-secondary); font-size: 13.5px; cursor: pointer; }
+  #add-provider:hover { border-color: var(--primary); color: var(--primary); }
+  .empty-hint { padding: 14px 0; color: var(--text-secondary); font-size: 13px; text-align: center; }
+
+  .btn-primary { padding: 9px 22px; border: none; border-radius: 10px; cursor: pointer; background: var(--primary); color: #fff; font-size: 14px; font-weight: 600; }
+  .btn-primary:hover { background: var(--primary-hover); }
+  .btn-secondary { padding: 8px 16px; border: 1px solid #ccd1d9; border-radius: 10px; cursor: pointer; background: #fff; color: var(--text); font-size: 13.5px; }
   .actions { display: flex; align-items: center; gap: 10px; margin-top: 18px; }
-  #save {
-    padding: 10px 28px; border: none; border-radius: 10px; cursor: pointer;
-    background: var(--primary); color: #fff; font-size: 14px; font-weight: 600;
-  }
-  #save:hover { background: var(--primary-hover); }
-  #grant {
-    padding: 9px 18px; border: 1px solid var(--primary); border-radius: 10px;
-    cursor: pointer; background: #fff; color: var(--primary); font-size: 13.5px;
-  }
-  #grant:hover { background: #fdeef4; }
-  #perm-status { font-size: 12.5px; color: var(--text-secondary); }
   #status { margin-left: auto; font-size: 13px; color: #2a7; }
 </style></head>
 <body>
   <div class="container">
-    <div class="header">
-      <div class="logo">译</div>
-      <h1>LLM Translate 设置</h1>
-    </div>
+    <div class="header"><div class="logo">译</div><h1>LLM Translate 设置</h1></div>
 
     <div class="card">
-      <h2>接口配置</h2>
-      <label>API Base URL <input id="baseUrl" placeholder="https://api.deepseek.com"></label>
-      <label>API Key <input id="apiKey" type="password"></label>
-      <label>模型名 <input id="model" placeholder="deepseek-chat"></label>
-      <label>系统提示词 <textarea id="systemPrompt"></textarea></label>
+      <h2>API 供应商</h2>
+      <div id="provider-list"></div>
+      <button id="add-provider">+ 添加供应商</button>
     </div>
 
     <div class="card">
       <h2>翻译偏好</h2>
+      <label>系统提示词 <textarea id="systemPrompt"></textarea></label>
       <div class="row">
-        <div><label>目标语言 <input id="targetLang"></label></div>
+        <div><label>目标语言 <select id="targetLang"></select></label></div>
         <div><label>最短段落长度 <input id="minLength" type="number"></label></div>
         <div><label>中文占比阈值 <input id="cjkRatioThreshold" type="number" step="0.05" min="0" max="1"></label></div>
       </div>
@@ -83,9 +71,7 @@
     </div>
 
     <div class="actions">
-      <button id="save">保存</button>
-      <button id="grant">授权访问 API 域名</button>
-      <span id="perm-status"></span>
+      <button id="save" class="btn-primary">保存</button>
       <span id="status"></span>
     </div>
   </div>
