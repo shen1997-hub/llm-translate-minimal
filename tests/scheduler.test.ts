@@ -12,7 +12,7 @@ function makeDeps(overrides: Partial<SchedulerDeps> = {}): SchedulerDeps {
     setCached: vi.fn(async () => {}),
     getSettings: vi.fn(async () => ({
       providers: [{
-        id: 'pv-1', name: 'Test', baseUrl: 'https://api.test.com',
+        id: 'pv-1', name: 'Test', protocol: 'openai', baseUrl: 'https://api.test.com',
         apiKey: 'sk-x', models: ['m1'], activeModel: 'm1',
       }],
       activeProviderId: 'pv-1',
@@ -105,7 +105,7 @@ describe('handleTranslateRequest', () => {
     const deps = makeDeps();
     await handleTranslateRequest(REQ, deps);
     const call = (deps.translate as any).mock.calls[0];
-    expect(call[0]).toEqual({ baseUrl: 'https://api.test.com', apiKey: 'sk-x', model: 'm1' });
+    expect(call[0]).toEqual({ baseUrl: 'https://api.test.com', apiKey: 'sk-x', model: 'm1', protocol: 'openai' });
     expect(call[2].sourceLang).toBe('auto');
   });
 
@@ -124,5 +124,22 @@ describe('handleTranslateRequest', () => {
     await handleTranslateRequest(REQ, deps);
     const call = (deps.translate as any).mock.calls[0];
     expect(call[2].targetLang).toBe('中文');
+  });
+
+  it('cfg 透传供应商 protocol（claude）', async () => {
+    const deps = makeDeps({
+      getSettings: vi.fn(async () => ({
+        providers: [{
+          id: 'pv-1', name: 'Claude', protocol: 'claude', baseUrl: 'https://api.anthropic.com',
+          apiKey: 'sk-ant', models: ['claude-x'], activeModel: 'claude-x',
+        }],
+        activeProviderId: 'pv-1', sourceLang: 'auto',
+        systemPrompt: 'SYS', targetLang: '中文',
+        blacklist: [], disabledSites: [], minLength: 20, cjkRatioThreshold: 0.3,
+        baseUrl: '', apiKey: '', model: '',
+      })) as any,
+    });
+    await handleTranslateRequest(REQ, deps);
+    expect((deps.translate as any).mock.calls[0][0].protocol).toBe('claude');
   });
 });

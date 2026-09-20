@@ -19,7 +19,7 @@ export async function handleTranslateRequest(req: TranslateRequest, deps: Schedu
   if (!provider) {
     return { kind: 'error', taskId: req.taskId, chunkId: req.chunkId, code: 'auth', message: '尚未配置 API 供应商，请前往设置页添加' };
   }
-  const cfg: LlmConfig = { baseUrl: provider.baseUrl, apiKey: provider.apiKey, model: resolveModel(provider) };
+  const cfg: LlmConfig = { baseUrl: provider.baseUrl, apiKey: provider.apiKey, model: resolveModel(provider), protocol: provider.protocol };
   const targetLang = req.targetLang ?? settings.targetLang;
   const texts = req.units.map(u => u.text);
   const keys = texts.map(t => cacheKey(t, PROMPT_VERSION, cfg.model, targetLang));
