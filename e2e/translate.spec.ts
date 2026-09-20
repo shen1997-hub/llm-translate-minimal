@@ -8,7 +8,7 @@ const PAGE_URL = `${STUB_ORIGIN}/page`;
 
 const BASE_SETTINGS = {
   providers: [{
-    id: 'pv-1', name: 'Stub', baseUrl: STUB_ORIGIN,
+    id: 'pv-1', name: 'Stub', baseUrl: STUB_ORIGIN, protocol: 'openai',
     apiKey: 'sk-test', models: ['m1'], activeModel: 'm1',
   }],
   activeProviderId: 'pv-1',
@@ -199,4 +199,44 @@ test('划词翻译：选中文本出现圆钮，点击弹出浮窗显示译文',
   const panel = page.locator(`${SEL} .panel`);
   await expect(panel).toBeVisible();
   await expect(panel).toContainText('译文', { timeout: 15_000 });
+});
+
+
+test('Claude 协议供应商：全文翻译走 /v1/messages', async ({ context, extensionId }) => {
+  await seedSettings(context, extensionId, {
+    providers: [{
+      id: 'pv-claude', name: 'Claude', protocol: 'claude', baseUrl: STUB_ORIGIN,
+      apiKey: 'sk-ant', models: ['claude-x'], activeModel: 'claude-x',
+    }],
+    activeProviderId: 'pv-claude',
+  });
+  const driver = await openDriver(context, extensionId);
+  const page = await openTestPage(context, driver);
+
+  await sendToTestPage(driver, { kind: 'start' });
+
+  const hosts = page.locator(HOST);
+  await expect(hosts).toHaveCount(2, { timeout: 15_000 });
+  await expect(hosts.first()).toContainText('译文', { timeout: 15_000 });
+  await expect(hosts.nth(1)).toContainText('译文');
+});
+
+test('设置页从 CC Switch 数据库导入供应商', async ({ context, extensionId }) => {
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/options.html`);
+
+  await page.setInputFiles('#ccswitch-file', 'e2e/fixtures/cc-switch-test.db');
+  const rows = page.locator('#import-list .import-row');
+  // official 行被跳过：只剩 claude + codex 两条
+  await expect(rows).toHaveCount(2, { timeout: 15_000 });
+  await expect(rows.first()).toContainText('TestClaude');
+  await expect(rows.first()).toContainText('Claude');
+
+  await page.locator('#import-list button[data-act="import"]').click();
+  // seed 的 Stub 供应商 + 导入的 2 个 = 3 行；is_current=1 的 TestClaude 被设为当前
+  const pvRows = page.locator('.pv-row');
+  await expect(pvRows).toHaveCount(3);
+  await expect(pvRows.nth(1)).toContainText('TestClaude');
+  await expect(pvRows.nth(1)).toContainText('当前');
+  await page.close();
 });

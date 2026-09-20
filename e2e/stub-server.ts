@@ -52,7 +52,7 @@ export function startStubServer(port = STUB_PORT): http.Server {
         return;
       }
 
-      if (url.pathname === '/chat/completions' && req.method === 'POST') {
+      if ((url.pathname === '/chat/completions' || url.pathname === '/v1/messages') && req.method === 'POST') {
         let body = '';
         req.on('data', (c) => (body += c));
         req.on('end', () => {
@@ -64,9 +64,14 @@ export function startStubServer(port = STUB_PORT): http.Server {
               return;
             }
             const indices = collectIndices(body);
-            const items = indices.map((i) => ({ i, t: `译文${i}` }));
             res.writeHead(200, { ...corsHeaders, 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ items }) } }] }));
+            if (url.pathname === '/v1/messages') {
+              const text = indices.map((i) => `[${i}] 译文${i}`).join('\n\n');
+              res.end(JSON.stringify({ content: [{ type: 'text', text }] }));
+            } else {
+              const items = indices.map((i) => ({ i, t: `译文${i}` }));
+              res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ items }) } }] }));
+            }
           }, state.delayMs);
         });
         return;

@@ -1,4 +1,4 @@
-# LLM Translate
+# 极简翻译（Minimal Translate）
 
 基于大语言模型的网页翻译浏览器扩展：整页双语对照翻译 + 划词翻译浮窗，支持任意 OpenAI 兼容 API（DeepSeek、GLM、OpenAI、Ollama 等）。
 
@@ -80,6 +80,3 @@ TypeScript · [WXT](https://wxt.dev)（MV3）· Vitest + jsdom · Playwright · 
 
 [MIT](LICENSE)
 
-## 致谢
-
-交互设计参考了[沉浸式翻译](https://immersivetranslate.com/)等优秀产品。
