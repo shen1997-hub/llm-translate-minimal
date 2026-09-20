@@ -37,6 +37,7 @@ let port: chrome.runtime.Port | null = null;
 let pidSeq = 0;
 let selUI: SelUI | null = null;
 let selReq: TranslateRequest | null = null; // 最后一次划词请求，供重试重发
+let selTimer: ReturnType<typeof setTimeout> | null = null;
 let speaking = false;
 
 export default defineContentScript({
@@ -230,6 +231,8 @@ async function startTranslate(): Promise<void> {
 function onChunkResponse(msg: TranslateResponse): void {
   console.log('[llm-tr] chunk response:', msg.kind, msg.chunkId, msg.kind === 'error' ? `${msg.code}: ${msg.message}` : ''); // [diag]
   if (msg.taskId.startsWith('sel-')) {
+    if (!selReq || msg.taskId !== selReq.taskId) return; // 陈旧响应：忽略
+    if (selTimer !== null) { clearTimeout(selTimer); selTimer = null; }
     if (selUI) {
       if (msg.kind === 'error') selUI.setPanelState('error', msg.message);
       else selUI.setPanelState('done', msg.translations[0]?.text ?? '');
@@ -328,6 +331,7 @@ function cancelTask(opts?: { silent?: boolean }): void {
 
 function clearAll(): void {
   cancelTask();
+  if (selTimer !== null) { clearTimeout(selTimer); selTimer = null; }
   selUI?.hideDot();
   selUI?.hidePanel();
   if (speaking) { speechSynthesis.cancel(); speaking = false; }
@@ -472,4 +476,9 @@ async function onSelDotClick(): Promise<void> {
     targetLang: cjkRatio(text) > 0.5 ? 'English' : s.targetLang,
   };
   postToPort(selReq);
+  if (selTimer !== null) clearTimeout(selTimer);
+  selTimer = setTimeout(() => {
+    selTimer = null;
+    selUI?.setPanelState('error', '翻译超时，请重试');
+  }, CHUNK_TIMEOUT_MS);
 }

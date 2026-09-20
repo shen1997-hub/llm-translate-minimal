@@ -130,10 +130,21 @@ export function createSelectionUI(doc: Document, cbs: SelUICallbacks): SelUI {
       win?.innerWidth ?? 1024, win?.innerHeight ?? 768);
   }
 
+  function hidePanel(): void {
+    panel.hidden = true;
+    pinned = false;
+    lastText = '';
+    pinBtn.classList.remove('active');
+    upBtn.classList.remove('active');
+    downBtn.classList.remove('active');
+    copyBtn.textContent = '📋';
+    if (copyTimer !== null) { clearTimeout(copyTimer); copyTimer = null; }
+  }
+
   return {
     host,
     showDot(x, y) {
-      panel.hidden = true;
+      hidePanel();
       host.style.left = `${x}px`;
       host.style.top = `${y}px`;
       dot.hidden = false;
@@ -164,13 +175,7 @@ export function createSelectionUI(doc: Document, cbs: SelUICallbacks): SelUI {
         bodyEl.appendChild(btn);
       }
     },
-    hidePanel() {
-      panel.hidden = true;
-      pinned = false;
-      pinBtn.classList.remove('active');
-      upBtn.classList.remove('active');
-      downBtn.classList.remove('active');
-    },
+    hidePanel,
     isPinned: () => pinned,
     pathInside: (path) => path.includes(host),
     destroy() { if (copyTimer !== null) clearTimeout(copyTimer); host.remove(); },
