@@ -57,11 +57,12 @@ describe('parseCcSwitchProviders', () => {
 
   it('跳过：official 行、无 Key 行、codex 缺 base_url 行、非法 JSON 行、未知 app_type', () => {
     const rows: CcSwitchRow[] = [
-      { id: 'codex-official', app_type: 'codex', name: 'OpenAI Official', settings_config: '{"auth":{},"config":""}', is_current: 0 },
+      { id: 'codex-official', app_type: 'codex', name: 'OpenAI Official', settings_config: '{"auth":{"OPENAI_API_KEY":"k"},"config":"model = \\"m\\"\\nbase_url = \\"https://api.openai.com/v1\\""}', is_current: 0 },
       { id: 'no-key', app_type: 'claude', name: 'NoKey', settings_config: '{"env":{}}', is_current: 0 },
       { id: 'no-url', app_type: 'codex', name: 'NoUrl', settings_config: '{"auth":{"OPENAI_API_KEY":"k"},"config":"model = \\"m\\""}', is_current: 0 },
       { id: 'bad', app_type: 'claude', name: 'Bad', settings_config: 'not-json', is_current: 0 },
-      { id: 'g', app_type: 'gemini', name: 'G', settings_config: '{"env":{}}', is_current: 0 },
+      { id: 'null-json', app_type: 'claude', name: 'Null', settings_config: 'null', is_current: 0 },
+      { id: 'g', app_type: 'gemini', name: 'G', settings_config: '{"env":{"ANTHROPIC_AUTH_TOKEN":"k","ANTHROPIC_BASE_URL":"https://g.example.com"}}', is_current: 0 },
     ];
     expect(parseCcSwitchProviders(rows)).toEqual([]);
   });

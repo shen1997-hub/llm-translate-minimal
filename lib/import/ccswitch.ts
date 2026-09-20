@@ -68,6 +68,7 @@ export function parseCcSwitchProviders(rows: CcSwitchRow[]): ImportedProvider[] 
     } catch {
       continue;
     }
+    if (cfg === null || typeof cfg !== 'object' || Array.isArray(cfg)) continue;
     const mapped = row.app_type === 'claude' ? mapClaudeRow(row, cfg)
       : row.app_type === 'codex' ? mapCodexRow(row, cfg)
       : null;
