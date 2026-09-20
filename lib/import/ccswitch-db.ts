@@ -4,12 +4,11 @@ import type { CcSwitchRow } from './ccswitch';
 
 export async function readCcSwitchDb(buf: ArrayBuffer): Promise<CcSwitchRow[]> {
   const SQL = await initSqlJs({ locateFile: () => wasmUrl });
-  let db: InstanceType<typeof SQL.Database>;
-  try {
-    db = new SQL.Database(new Uint8Array(buf));
-  } catch {
+  const head = new TextDecoder().decode(buf.slice(0, 16));
+  if (head !== 'SQLite format 3\0') {
     throw new Error('不是有效的 CC Switch 数据库（SQLite）文件');
   }
+  const db = new SQL.Database(new Uint8Array(buf));
   try {
     const res = db.exec(
       "SELECT id, app_type, name, settings_config, is_current FROM providers WHERE app_type IN ('claude','codex')",
