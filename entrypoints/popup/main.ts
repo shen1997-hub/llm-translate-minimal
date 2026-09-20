@@ -35,21 +35,23 @@ async function refresh(): Promise<void> {
   ($('site-toggle') as HTMLInputElement).checked = !disabled;
 
   // 语言下拉
-  fillLangSelect($('source-lang') as HTMLSelectElement, ['自动检测', ...LANGUAGES], s.sourceLang === 'auto' ? '自动检测' : s.sourceLang);
+  fillLangSelect($('source-lang') as HTMLSelectElement, ['自动检测', ...LANGUAGES], s.sourceLang);
   fillLangSelect($('target-lang') as HTMLSelectElement, LANGUAGES, s.targetLang);
 
   // 供应商/模型两级下拉
   const providerSelect = $('provider-select') as HTMLSelectElement;
   const modelSelect = $('model-select') as HTMLSelectElement;
+  const providerEmpty = $('provider-empty');
+  const modelRow = $('model-row');
   providerSelect.innerHTML = '';
   if (s.providers.length === 0) {
-    const opt = document.createElement('option');
-    opt.textContent = '未配置，点击前往设置';
-    providerSelect.appendChild(opt);
-    providerSelect.disabled = true;
-    modelSelect.innerHTML = '';
-    modelSelect.disabled = true;
+    providerSelect.hidden = true;
+    modelRow.hidden = true;
+    providerEmpty.hidden = false;
   } else {
+    providerSelect.hidden = false;
+    modelRow.hidden = false;
+    providerEmpty.hidden = true;
     providerSelect.disabled = false;
     modelSelect.disabled = false;
     const active = getActiveProvider(s);
@@ -153,6 +155,10 @@ $('clear').addEventListener('click', async () => {
 });
 
 $('open-options').addEventListener('click', (e) => {
+  e.preventDefault();
+  chrome.runtime.openOptionsPage();
+});
+$('provider-empty').addEventListener('click', (e) => {
   e.preventDefault();
   chrome.runtime.openOptionsPage();
 });
