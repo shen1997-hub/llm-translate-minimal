@@ -30,6 +30,20 @@ describe('findContentRoot', () => {
     const d = doc(`<nav><ul><li><a href="#">only nav links here</a></li></ul></nav>`);
     expect(findContentRoot(d)).toBe(d.body);
   });
+
+  it('站点规则的 rootSelector 命中时直接选它（跳过评分）', () => {
+    const d = doc(`
+      <main><p>${LONG}</p><p>${LONG}</p></main>
+      <div data-testid="primaryColumn"><p>short</p></div>
+    `);
+    const root = findContentRoot(d, { rootSelector: '[data-testid="primaryColumn"]' });
+    expect(root.getAttribute('data-testid')).toBe('primaryColumn');
+  });
+
+  it('站点规则的 rootSelector 未命中时退回评分逻辑', () => {
+    const d = doc(`<article><p>${LONG}</p><p>${LONG}</p></article>`);
+    expect(findContentRoot(d, { rootSelector: '[data-testid="primaryColumn"]' }).tagName).toBe('ARTICLE');
+  });
 });
 
 describe('isExcludedContainer', () => {

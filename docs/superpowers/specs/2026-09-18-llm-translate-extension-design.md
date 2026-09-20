@@ -65,6 +65,9 @@
 **第二步：段落提取**
 
 - 候选元素：`p`、`li`、`h1`–`h4`、`blockquote`、`td`、`th`、`dd`、`dt`、`figcaption`
+- 通用块级文本补充：只含内联子元素（`span`/`a`/`em` 等）或无子元素、且不含候选后代的 `div` 也视为候选（覆盖 X/Facebook 等 `div + span` 正文结构），但适用更严的长度阈值（≥ 60 字符），避免抓到卡片/按钮碎文本
+- 排除容器过滤：候选元素自身命中负向规则，或其任意祖先命中第一步的结构性排除（`nav`/`aside`/`footer`/`header`/排除 role/`aria-hidden`）时直接跳过——即使正文根容器包含侧栏，侧栏内容也不会被提取
+- 站点规则（`lib/extraction/site-rules.ts`）：按域名命中 `{ rootSelector, extraCandidates, extraExcludes }`。`rootSelector` 命中时直接作为正文根（跳过评分）；`extraCandidates` 追加站点特有的候选选择器；`extraExcludes` 追加站点特有的排除祖先。当前内置 X/Twitter 规则（主栏 `[data-testid="primaryColumn"]` + 推文 `[data-testid="tweetText"]`）
 - **只取最内层候选元素**：若某候选元素内部还存在候选块级元素、且内部候选元素文本占该元素文本的 70% 以上，则跳过外层。解决 `<blockquote><p>…</p></blockquote>`、`<li><p>…</p></li>` 被重复提取的问题
 - 可见性：用 `textContent` 而非 `innerText`（`innerText` 会强制 reflow，大量调用有性能问题，且 jsdom 未实现导致无法单元测试）。可见性单独判断：`getComputedStyle` 的 `display`/`visibility` 均非隐藏值，且（`offsetParent !== null` 或 `position === 'fixed'`——`offsetParent` 对 fixed 元素恒为 `null`，需特判，否则悬浮正文会被误判为不可见）
 - 过滤规则（阈值均为设置项，默认值如下）：

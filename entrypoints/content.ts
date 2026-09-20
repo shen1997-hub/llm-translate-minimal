@@ -1,5 +1,6 @@
 import { findContentRoot } from '../lib/extraction/scoring';
 import { extractParagraphs, browserIsVisible } from '../lib/extraction/paragraphs';
+import { siteRuleFor } from '../lib/extraction/site-rules';
 import type { Paragraph } from '../lib/extraction/paragraphs';
 import { buildChunks } from '../lib/translation/chunking';
 import type { TranslateRequest, TranslateResponse } from '../lib/messaging/protocol';
@@ -37,11 +38,12 @@ export default defineContentScript({
   matches: ['<all_urls>'],
   main() {
     chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-      if (msg.kind === 'probe') { void probe().then(sendResponse); return true; }
-      if (msg.kind === 'start') { void startTranslate(); sendResponse({ ok: true }); return; }
+      if (msg.kind === 'probe') { void probe().then(sendResponse).catch((e) => console.error('[llm-tr] probe failed', e)); return true; } // [diag]
+      if (msg.kind === 'start') { void startTranslate().catch((e) => console.error('[llm-tr] start failed', e)); sendResponse({ ok: true }); return; } // [diag]
       if (msg.kind === 'cancel') { cancelTask(); sendResponse({ ok: true }); return; }
       if (msg.kind === 'clear') { clearAll(); sendResponse({ ok: true }); return; }
     });
+    console.log('[llm-tr] content script ready', location.href); // [diag]
     watchSpaNavigation();
   },
 });
@@ -60,10 +62,12 @@ async function currentHostBlacklisted(): Promise<boolean> {
   return s.blacklist.some(d => host === d || host.endsWith('.' + d)) || s.disabledSites.includes(host);
 }
 
+const SITE_RULE = siteRuleFor(location.hostname);
+
 async function collectParagraphs(): Promise<Paragraph[]> {
   const s = await getSettings();
-  const root = findContentRoot(document);
-  const ps = extractParagraphs(root, { minLength: s.minLength, cjkRatioThreshold: s.cjkRatioThreshold }, browserIsVisible);
+  const root = findContentRoot(document, SITE_RULE);
+  const ps = extractParagraphs(root, { minLength: s.minLength, cjkRatioThreshold: s.cjkRatioThreshold }, browserIsVisible, SITE_RULE);
   const fresh = ps.filter(p => !p.element.hasAttribute(STATE_ATTR));
   fresh.forEach(p => { p.id = stableId(p.element); });
   return fresh;
@@ -179,11 +183,14 @@ async function startTranslate(): Promise<void> {
   }
   starting = true;
   try {
-    if (await currentHostBlacklisted()) return;
+    console.log('[llm-tr] startTranslate: entry'); // [diag]
+    if (await currentHostBlacklisted()) { console.log('[llm-tr] startTranslate: blacklisted, abort'); return; } // [diag]
     const paragraphs = await collectParagraphs();
+    console.log('[llm-tr] startTranslate: paragraphs =', paragraphs.length); // [diag]
     if (paragraphs.length === 0) { notify({ kind: 'task-state', state: 'done' }); return; }
 
     const chunks = buildChunks(paragraphs.map(p => ({ id: p.id, text: p.text })));
+    console.log('[llm-tr] startTranslate: chunks =', chunks.length); // [diag]
     const id = `task-${Date.now()}`;
     task = {
       id, cancelled: false, total: chunks.length, done: 0,
@@ -198,6 +205,7 @@ async function startTranslate(): Promise<void> {
       p.element.setAttribute(STATE_ATTR, 'pending');
       ensureHost(p.element, hostId(id, p.id));
     }
+    console.log('[llm-tr] startTranslate: hosts created =', document.querySelectorAll(`[${HOST_ATTR}]`).length); // [diag]
     startObserver();
 
     chunks.forEach((chunk, i) => {
@@ -207,12 +215,14 @@ async function startTranslate(): Promise<void> {
       };
       sendChunk({ chunk: req, retries: 0, timer: null });
     });
+    console.log('[llm-tr] startTranslate: chunks posted to port'); // [diag]
   } finally {
     starting = false;
   }
 }
 
 function onChunkResponse(msg: TranslateResponse): void {
+  console.log('[llm-tr] chunk response:', msg.kind, msg.chunkId, msg.kind === 'error' ? `${msg.code}: ${msg.message}` : ''); // [diag]
   if (!task || msg.taskId !== task.id || task.cancelled) return;
   const entry = task.pending.get(msg.chunkId);
   if (!entry) return;

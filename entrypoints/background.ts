@@ -20,10 +20,13 @@ function release(): void {
 }
 
 export default defineBackground(() => {
+  console.log('[llm-tr] background SW started'); // [diag]
   browser.runtime.onConnect.addListener((port) => {
     if (port.name !== 'translate') return;
+    console.log('[llm-tr] port connected'); // [diag]
     port.onMessage.addListener(async (msg: TranslateRequest) => {
       if (msg.kind !== 'translate') return;
+      console.log('[llm-tr] SW received chunk', msg.chunkId, 'units =', msg.units.length); // [diag]
       await acquire();
       try {
         const response: TranslateResponse = await handleTranslateRequest(msg, {
@@ -33,6 +36,7 @@ export default defineBackground(() => {
           getSettings,
           jsonFormatSupported,
         });
+        console.log('[llm-tr] SW response', msg.chunkId, response.kind, response.kind === 'error' ? `${response.code}: ${response.message}` : ''); // [diag]
         port.postMessage(response);
       } catch (e) {
         // 兜底：任何意外异常（如 IndexedDB 故障）也必须回响应，保证每个请求恰好收到一个响应

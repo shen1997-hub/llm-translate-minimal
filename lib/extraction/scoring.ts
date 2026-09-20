@@ -4,6 +4,10 @@ const NEGATIVE_RE = /nav|menu|sidebar|footer|comment|promo|banner|cookie|related
 const POSITIVE_SELECTOR = 'article, main, [role="main"], [itemprop="articleBody"]';
 const BLOCK_SELECTOR = 'p, li, h1, h2, h3, h4, blockquote, td, th, dd, dt, figcaption';
 
+/** 段落提取时的结构性排除祖先（与 isExcludedContainer 的标签/角色/aria 规则一致） */
+export const EXCLUDED_ANCESTOR_SELECTOR =
+  'nav, aside, footer, header, [role="navigation"], [role="complementary"], [role="banner"], [aria-hidden="true"]';
+
 export function isExcludedContainer(el: Element): boolean {
   if (EXCLUDE_TAGS.has(el.tagName)) return true;
   if (EXCLUDE_ROLES.has(el.getAttribute('role') ?? '')) return true;
@@ -29,7 +33,11 @@ function score(el: Element): number {
   return blocks * 100 + textDensity;
 }
 
-export function findContentRoot(doc: Document): Element {
+export function findContentRoot(doc: Document, rule?: { rootSelector?: string }): Element {
+  if (rule?.rootSelector) {
+    const pinned = doc.querySelector(rule.rootSelector);
+    if (pinned) return pinned;
+  }
   const candidates = new Set<Element>();
   for (const el of doc.querySelectorAll(POSITIVE_SELECTOR)) candidates.add(el);
   if (candidates.size === 0) {

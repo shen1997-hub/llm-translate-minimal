@@ -56,6 +56,73 @@ describe('extractParagraphs', () => {
     const ps = extractParagraphs(r, OPTS, visible);
     expect(ps[0]!.text).toBe('This is a long enough english paragraph with weird spacing.');
   });
+
+  it('排除：nav/aside 内部的段落（即使根容器包含它们）', () => {
+    const r = root(`<nav><p>${LONG}</p></nav><p>${LONG}</p><aside><p>${LONG}</p></aside>`);
+    const ps = extractParagraphs(r, OPTS, visible);
+    expect(ps).toHaveLength(1);
+    expect(ps[0]!.element.closest('nav, aside')).toBeNull();
+  });
+
+  it('排除：role=complementary 与 aria-hidden 容器内部的段落', () => {
+    const r = root(`<div role="complementary"><p>${LONG}</p></div><div aria-hidden="true"><p>${LONG}</p></div><p>${LONG}</p>`);
+    expect(extractParagraphs(r, OPTS, visible)).toHaveLength(1);
+  });
+
+  it('排除：候选元素自身命中负向 class', () => {
+    const r = root(`<p class="cookie-banner">${LONG}</p><p>${LONG}</p>`);
+    expect(extractParagraphs(r, OPTS, visible)).toHaveLength(1);
+  });
+
+  it('站点规则 extraCandidates 捕获 div+span 结构的推文正文', () => {
+    const r = root(
+      `<div data-testid="tweetText"><span>This is a tweet written in English that should be translated.</span></div>`,
+    );
+    const ps = extractParagraphs(r, OPTS, visible, { extraCandidates: '[data-testid="tweetText"]' });
+    expect(ps).toHaveLength(1);
+    expect(ps[0]!.text).toContain('tweet written in English');
+  });
+
+  it('站点规则 extraExcludes 排除指定祖先内的段落', () => {
+    const r = root(`<div data-testid="sidebarColumn"><p>${LONG}</p></div><p>${LONG}</p>`);
+    const ps = extractParagraphs(r, OPTS, visible, { extraExcludes: '[data-testid="sidebarColumn"]' });
+    expect(ps).toHaveLength(1);
+  });
+
+  const LONG_BLOCK = 'This is a fairly long block of English text living inside a plain div element.';
+
+  it('通用块级文本：只含内联子元素的 div 被提取', () => {
+    const r = root(`<div><span>${LONG_BLOCK}</span></div>`);
+    const ps = extractParagraphs(r, OPTS, visible);
+    expect(ps).toHaveLength(1);
+    expect(ps[0]!.element.tagName).toBe('DIV');
+  });
+
+  it('通用块级文本：纯文本 div（无子元素）也被提取', () => {
+    const r = root(`<div>${LONG_BLOCK}</div>`);
+    expect(extractParagraphs(r, OPTS, visible)).toHaveLength(1);
+  });
+
+  it('通用块级文本：含候选后代的 div 不重复提取', () => {
+    const r = root(`<div><p>${LONG}</p></div>`);
+    const ps = extractParagraphs(r, OPTS, visible);
+    expect(ps).toHaveLength(1);
+    expect(ps[0]!.element.tagName).toBe('P');
+  });
+
+  it('通用块级文本：div 适用更严的长度阈值（60），p 不受影响', () => {
+    const mid = 'This div text is between twenty and sixty chars.'; // 48 字符
+    const r = root(`<div><span>${mid}</span></div><p>${mid}</p>`);
+    const ps = extractParagraphs(r, OPTS, visible);
+    expect(ps).toHaveLength(1);
+    expect(ps[0]!.element.tagName).toBe('P');
+  });
+
+  it('通用块级文本：含块级子元素的 div 不提取', () => {
+    const r = root(`<div><ul><li>${LONG_BLOCK}</li></ul></div>`);
+    const ps = extractParagraphs(r, OPTS, visible);
+    expect(ps.every(p => p.element.tagName !== 'DIV')).toBe(true);
+  });
 });
 
 describe('cjkRatio', () => {
