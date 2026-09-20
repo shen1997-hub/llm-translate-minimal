@@ -1,11 +1,13 @@
 import { findContentRoot } from '../lib/extraction/scoring';
-import { extractParagraphs, browserIsVisible } from '../lib/extraction/paragraphs';
+import { extractParagraphs, browserIsVisible, cjkRatio } from '../lib/extraction/paragraphs';
 import { siteRuleFor } from '../lib/extraction/site-rules';
 import type { Paragraph } from '../lib/extraction/paragraphs';
 import { buildChunks } from '../lib/translation/chunking';
 import type { TranslateRequest, TranslateResponse } from '../lib/messaging/protocol';
 import { ensureHost, setHostState, removeAllHosts, HOST_ATTR } from '../lib/renderer/host';
-import { getSettings } from '../lib/settings';
+import { createSelectionUI, SEL_HOST_ATTR } from '../lib/renderer/selection';
+import type { SelUI } from '../lib/renderer/selection';
+import { getSettings, getActiveProvider, resolveModel } from '../lib/settings';
 
 const STATE_ATTR = 'data-llm-translate-state';
 const PID_ATTR = 'data-llm-translate-pid';
@@ -33,6 +35,9 @@ interface Task {
 let task: Task | null = null;
 let port: chrome.runtime.Port | null = null;
 let pidSeq = 0;
+let selUI: SelUI | null = null;
+let selReq: TranslateRequest | null = null; // 最后一次划词请求，供重试重发
+let speaking = false;
 
 export default defineContentScript({
   matches: ['<all_urls>'],
@@ -44,6 +49,7 @@ export default defineContentScript({
       if (msg.kind === 'clear') { clearAll(); sendResponse({ ok: true }); return; }
     });
     console.log('[llm-tr] content script ready', location.href); // [diag]
+    initSelectionTranslate();
     watchSpaNavigation();
   },
 });
@@ -223,6 +229,13 @@ async function startTranslate(): Promise<void> {
 
 function onChunkResponse(msg: TranslateResponse): void {
   console.log('[llm-tr] chunk response:', msg.kind, msg.chunkId, msg.kind === 'error' ? `${msg.code}: ${msg.message}` : ''); // [diag]
+  if (msg.taskId.startsWith('sel-')) {
+    if (selUI) {
+      if (msg.kind === 'error') selUI.setPanelState('error', msg.message);
+      else selUI.setPanelState('done', msg.translations[0]?.text ?? '');
+    }
+    return;
+  }
   if (!task || msg.taskId !== task.id || task.cancelled) return;
   const entry = task.pending.get(msg.chunkId);
   if (!entry) return;
@@ -315,6 +328,9 @@ function cancelTask(opts?: { silent?: boolean }): void {
 
 function clearAll(): void {
   cancelTask();
+  selUI?.hideDot();
+  selUI?.hidePanel();
+  if (speaking) { speechSynthesis.cancel(); speaking = false; }
   removeAllHosts(document);
   document.querySelectorAll(`[${STATE_ATTR}]`).forEach(el => el.removeAttribute(STATE_ATTR));
   document.querySelectorAll(`[${PID_ATTR}]`).forEach(el => el.removeAttribute(PID_ATTR));
@@ -332,10 +348,11 @@ function startObserver(): void {
 }
 
 function isSelfMutation(m: MutationRecord): boolean {
-  if (m.target instanceof Element && m.target.closest(`[${HOST_ATTR}]`)) return true;
+  if (m.target instanceof Element && m.target.closest(`[${HOST_ATTR}],[${SEL_HOST_ATTR}]`)) return true;
   const added = Array.from(m.addedNodes);
   return added.length > 0 && added.every(n =>
-    n instanceof Element && (n.hasAttribute(HOST_ATTR) || n.querySelector(`[${HOST_ATTR}]`) !== null));
+    n instanceof Element && (n.hasAttribute(HOST_ATTR) || n.hasAttribute(SEL_HOST_ATTR)
+      || n.querySelector(`[${HOST_ATTR}],[${SEL_HOST_ATTR}]`) !== null));
 }
 
 let extracting = false;
@@ -389,4 +406,69 @@ function hostId(taskId: string, paragraphId: string): string {
 
 function notify(msg: unknown): void {
   chrome.runtime.sendMessage(msg).catch(() => { /* popup 未打开时忽略 */ });
+}
+
+function initSelectionTranslate(): void {
+  selUI = createSelectionUI(document, {
+    onDotClick: () => void onSelDotClick(),
+    onClose: () => selUI?.hidePanel(),
+    onRetry: () => {
+      if (!selReq) return;
+      selUI?.setPanelState('loading');
+      postToPort(selReq);
+    },
+    onCopy: (text) => { void navigator.clipboard.writeText(text).catch(() => {}); },
+    onSpeak: (text) => {
+      if (!text) return;
+      if (speaking) { speechSynthesis.cancel(); speaking = false; return; }
+      const u = new SpeechSynthesisUtterance(text);
+      u.onend = () => { speaking = false; };
+      speaking = true;
+      speechSynthesis.speak(u);
+    },
+  });
+
+  document.addEventListener('mouseup', (e) => {
+    void (async () => {
+      const s = await getSettings();
+      if (!s.selectionTranslate) return;
+      if (await currentHostBlacklisted()) return;
+      const text = window.getSelection()?.toString().replace(/\s+/g, ' ').trim() ?? '';
+      if (text.length < 2) return;
+      selUI?.showDot(e.pageX + 8, e.pageY + 8);
+    })();
+  });
+
+  document.addEventListener('mousedown', (e) => {
+    if (!selUI || selUI.pathInside(e.composedPath())) return;
+    selUI.hideDot();
+    if (!selUI.isPinned()) selUI.hidePanel();
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || !selUI) return;
+    selUI.hideDot();
+    if (!selUI.isPinned()) selUI.hidePanel();
+  });
+}
+
+async function onSelDotClick(): Promise<void> {
+  if (!selUI) return;
+  const text = window.getSelection()?.toString().replace(/\s+/g, ' ').trim() ?? '';
+  selUI.hideDot();
+  if (text.length < 2) return; // 选区已取消：不发请求
+  const rect = window.getSelection()!.getRangeAt(0).getBoundingClientRect();
+  const s = await getSettings();
+  const provider = getActiveProvider(s);
+  const model = provider ? `${provider.name} · ${resolveModel(provider)}` : '';
+  selUI.showPanel(rect.left + window.scrollX, rect.bottom + window.scrollY + 6, model);
+  selUI.setPanelState('loading');
+  selReq = {
+    kind: 'translate',
+    taskId: `sel-${Date.now()}`,
+    chunkId: 'c0',
+    units: [{ paragraphId: 'sel', text, sliceIndex: 0, sliceTotal: 1 }],
+    targetLang: cjkRatio(text) > 0.5 ? 'English' : s.targetLang,
+  };
+  postToPort(selReq);
 }
