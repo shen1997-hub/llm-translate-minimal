@@ -2,21 +2,124 @@
 <html lang="zh-CN">
 <head><meta charset="utf-8">
 <style>
-  body { font-family: system-ui, sans-serif; width: 280px; padding: 12px; }
-  button { width: 100%; padding: 8px; margin-top: 8px; cursor: pointer; }
-  #estimate, #progress, #message { font-size: 13px; color: #555; margin-top: 8px; }
+  :root {
+    --primary: #e91e63;
+    --primary-hover: #d81b60;
+    --bg: #f2f4f8;
+    --card: #ffffff;
+    --text: #333333;
+    --text-secondary: #999999;
+    --border: #eeeeee;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    width: 320px; background: var(--bg); color: var(--text); font-size: 14px;
+  }
+
+  .header { display: flex; align-items: center; gap: 8px; padding: 14px 16px 10px; }
+  .header .logo {
+    width: 26px; height: 26px; border-radius: 8px; background: var(--primary);
+    color: #fff; display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700;
+  }
+  .header .title { font-weight: 600; font-size: 15px; }
+
+  .card {
+    background: var(--card); border-radius: 12px; margin: 8px 12px; padding: 4px 14px;
+  }
+  .card .row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 11px 0; font-size: 13.5px;
+  }
+  .card .row + .row { border-top: 1px solid var(--border); }
+  .card .label { color: var(--text-secondary); }
+  .card .value { color: var(--text); font-weight: 500; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* iOS 风格开关 */
+  .switch { position: relative; width: 42px; height: 24px; flex: none; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; inset: 0; border-radius: 24px; background: #ccd1d9;
+    transition: background 0.2s; cursor: pointer;
+  }
+  .slider::before {
+    content: ""; position: absolute; width: 20px; height: 20px; left: 2px; top: 2px;
+    border-radius: 50%; background: #fff; transition: transform 0.2s;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  }
+  .switch input:checked + .slider { background: var(--primary); }
+  .switch input:checked + .slider::before { transform: translateX(18px); }
+
+  #estimate, #progress { font-size: 12.5px; color: var(--text-secondary); padding: 0 16px; margin-top: 6px; }
+  #message { font-size: 12.5px; color: var(--text-secondary); padding: 0 16px; margin-top: 6px; }
   #message.error { color: #e06c75; }
-  .row { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 13px; }
-  a { font-size: 12px; }
+
+  .action-wrap { padding: 10px 12px 4px; }
+  #action {
+    width: 100%; padding: 12px; border: none; border-radius: 10px; cursor: pointer;
+    background: var(--primary); color: #fff; font-size: 15px; font-weight: 600;
+    transition: background 0.15s;
+  }
+  #action:hover { background: var(--primary-hover); }
+  #action:disabled { background: #ccd1d9; cursor: not-allowed; }
+
+  #grant {
+    width: 100%; margin-top: 8px; padding: 10px; border: 1px solid var(--primary);
+    border-radius: 10px; cursor: pointer; background: #fff; color: var(--primary);
+    font-size: 13.5px; font-weight: 500;
+  }
+  #grant:hover { background: #fdeef4; }
+
+  .chips { display: flex; gap: 10px; padding: 10px 12px 6px; }
+  .chip {
+    flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+    background: var(--card); border: none; border-radius: 10px; padding: 10px 0;
+    font-size: 13px; color: var(--text); cursor: pointer;
+  }
+  .chip:hover { background: #fafbfc; }
+
+  .footer {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px 12px; margin-top: 4px; border-top: 1px solid var(--border);
+    background: var(--card); font-size: 12.5px; color: var(--text-secondary);
+  }
+  .footer a { color: var(--text-secondary); text-decoration: none; display: flex; align-items: center; gap: 5px; }
+  .footer a:hover { color: var(--text); }
 </style></head>
 <body>
-  <div class="row"><input type="checkbox" id="site-toggle" checked><label for="site-toggle">在此站点启用</label></div>
+  <div class="header">
+    <div class="logo">译</div>
+    <div class="title">LLM Translate</div>
+  </div>
+
+  <div class="card">
+    <div class="row"><span class="label">翻译模型</span><span class="value" id="model-name">-</span></div>
+    <div class="row"><span class="label">目标语言</span><span class="value" id="target-lang">-</span></div>
+    <div class="row">
+      <span>在此站点启用</span>
+      <label class="switch"><input type="checkbox" id="site-toggle" checked><span class="slider"></span></label>
+    </div>
+  </div>
+
   <div id="estimate"></div>
   <div id="progress"></div>
-  <button id="action">翻译本页</button>
-  <button id="grant" hidden>授权 API 域名</button>
   <div id="message"></div>
-  <p><a href="#" id="open-options">打开设置页</a></p>
+
+  <div class="action-wrap">
+    <button id="action">翻译本页</button>
+    <button id="grant" hidden>授权 API 域名</button>
+  </div>
+
+  <div class="chips">
+    <button class="chip" id="clear">✕ 清除本页译文</button>
+  </div>
+
+  <div class="footer">
+    <a href="#" id="open-options">⚙ 设置</a>
+    <span id="version"></span>
+    <span></span>
+  </div>
   <script type="module" src="./main.ts"></script>
 </body>
 </html>

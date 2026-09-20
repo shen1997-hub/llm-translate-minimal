@@ -28,6 +28,8 @@ async function refresh(): Promise<void> {
   currentTabId = tab.id;
   const host = new URL(tab.url).hostname;
   const s = await getSettings();
+  $('model-name').textContent = s.model || '-';
+  $('target-lang').textContent = s.targetLang || '-';
   const disabled = s.disabledSites.includes(host);
   ($('site-toggle') as HTMLInputElement).checked = !disabled;
 
@@ -99,6 +101,12 @@ $('site-toggle').addEventListener('change', async (e) => {
   if (!enabled) await chrome.tabs.sendMessage(tab.id, { kind: 'clear' }).catch(() => {});
 });
 
+$('clear').addEventListener('click', async () => {
+  await chrome.tabs.sendMessage(currentTabId, { kind: 'clear' }).catch(() => {});
+  setState('idle');
+  $('estimate').textContent = '';
+});
+
 $('open-options').addEventListener('click', (e) => {
   e.preventDefault();
   chrome.runtime.openOptionsPage();
@@ -108,5 +116,7 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg.kind === 'progress') $('progress').textContent = `进度 ${msg.done} / ${msg.total}`;
   if (msg.kind === 'task-state') setState(msg.state, msg.message ?? '');
 });
+
+$('version').textContent = `v${chrome.runtime.getManifest().version}`;
 
 void refresh();
