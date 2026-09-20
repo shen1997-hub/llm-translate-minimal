@@ -33,6 +33,7 @@ async function refresh(): Promise<void> {
   const s = await getSettings();
   const disabled = s.disabledSites.includes(host);
   ($('site-toggle') as HTMLInputElement).checked = !disabled;
+  ($('sel-toggle') as HTMLInputElement).checked = s.selectionTranslate;
 
   // 语言下拉
   fillLangSelect($('source-lang') as HTMLSelectElement, ['自动检测', ...LANGUAGES], s.sourceLang);
@@ -146,6 +147,10 @@ $('site-toggle').addEventListener('change', async (e) => {
   const disabledSites = enabled ? s.disabledSites.filter(d => d !== host) : [...new Set([...s.disabledSites, host])];
   await saveSettings({ disabledSites });
   if (!enabled) await chrome.tabs.sendMessage(tab.id, { kind: 'clear' }).catch(() => {});
+});
+
+$('sel-toggle').addEventListener('change', async (e) => {
+  await saveSettings({ selectionTranslate: (e.target as HTMLInputElement).checked });
 });
 
 $('clear').addEventListener('click', async () => {

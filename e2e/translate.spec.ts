@@ -3,6 +3,7 @@ import type { BrowserContext, Page } from '@playwright/test';
 import { STUB_ORIGIN } from './stub-server';
 
 const HOST = '[data-llm-translate-host]';
+const SEL = '[data-llm-translate-sel]';
 const PAGE_URL = `${STUB_ORIGIN}/page`;
 
 const BASE_SETTINGS = {
@@ -174,4 +175,28 @@ test('站点开关：写入 disabledSites 后不翻译，刷新后保持', async
   const probeAfterReload = await sendToTestPage(driver, { kind: 'probe' });
   expect(probeAfterReload).toEqual([{ kind: 'probe-result', paragraphs: 0, chars: 0, blacklisted: true }]);
   await expect(page.locator(HOST)).toHaveCount(0);
+});
+
+test('划词翻译：选中文本出现圆钮，点击弹出浮窗显示译文', async ({ context, extensionId }) => {
+  const driver = await openDriver(context, extensionId);
+  const page = await openTestPage(context, driver);
+
+  // 构造真实选区并派发 mouseup（Playwright 的 css 选择器可穿透 Shadow DOM）
+  await page.evaluate(() => {
+    const p = document.querySelector('article p')!;
+    const range = document.createRange();
+    range.selectNodeContents(p);
+    const sel = window.getSelection()!;
+    sel.removeAllRanges();
+    sel.addRange(range);
+    p.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: 100, clientY: 100 }));
+  });
+
+  const dot = page.locator(`${SEL} .dot`);
+  await expect(dot).toBeVisible({ timeout: 10_000 });
+
+  await dot.click();
+  const panel = page.locator(`${SEL} .panel`);
+  await expect(panel).toBeVisible();
+  await expect(panel).toContainText('译文', { timeout: 15_000 });
 });

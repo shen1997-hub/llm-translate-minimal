@@ -429,6 +429,7 @@ function initSelectionTranslate(): void {
   });
 
   document.addEventListener('mouseup', (e) => {
+    if (selUI && selUI.pathInside(e.composedPath())) return; // 点击圆钮/浮窗自身的 mouseup 不触发
     void (async () => {
       const s = await getSettings();
       if (!s.selectionTranslate) return;
