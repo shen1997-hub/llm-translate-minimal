@@ -2,7 +2,10 @@ import {
   getSettings, saveSettings, saveProvider, deleteProvider, setActiveProvider,
   LANGUAGES,
 } from '../../lib/settings';
-import type { Provider, Settings } from '../../lib/settings';
+import { readCcSwitchDb } from '../../lib/import/ccswitch-db';
+import { parseCcSwitchProviders } from '../../lib/import/ccswitch';
+import type { ImportedProvider } from '../../lib/import/ccswitch';
+import type { ApiProtocol, Provider, Settings } from '../../lib/settings';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -48,7 +51,7 @@ function buildRow(p: Provider, s: Settings): HTMLElement {
       <button class="btn-text danger" data-act="del">删除</button>
     </div>`;
   row.querySelector('.pv-name')!.textContent = p.name;
-  row.querySelector('.pv-sub')!.textContent = `${resolveModelLabel(p)} · ${p.baseUrl}`;
+  row.querySelector('.pv-sub')!.textContent = `[${p.protocol === 'claude' ? 'Claude' : 'OpenAI'}] ${resolveModelLabel(p)} · ${p.baseUrl}`;
   row.querySelector('[data-act="use"]')?.addEventListener('click', async () => {
     await setActiveProvider(p.id);
     await renderProviders();
@@ -73,6 +76,10 @@ function buildForm(p: Provider): HTMLElement {
   const form = document.createElement('div');
   form.className = 'pv-form';
   form.innerHTML = `
+    <label>协议 <select data-f="protocol">
+      <option value="openai">OpenAI 兼容</option>
+      <option value="claude">Claude</option>
+    </select></label>
     <label>名称 <input data-f="name" placeholder="如 DeepSeek"></label>
     <label>API Base URL <input data-f="baseUrl" placeholder="https://api.deepseek.com"></label>
     <label>API Key <input data-f="apiKey" type="password"></label>
@@ -83,6 +90,13 @@ function buildForm(p: Provider): HTMLElement {
       <button class="btn-secondary" data-act="cancel">取消</button>
     </div>`;
   const val = (f: string) => form.querySelector<HTMLInputElement>(`[data-f="${f}"]`)!;
+  const protoSel = form.querySelector<HTMLSelectElement>('[data-f="protocol"]')!;
+  protoSel.value = p.protocol;
+  const syncPlaceholder = () => {
+    val('baseUrl').placeholder = protoSel.value === 'claude' ? 'https://api.anthropic.com' : 'https://api.deepseek.com';
+  };
+  protoSel.addEventListener('change', syncPlaceholder);
+  syncPlaceholder();
   val('name').value = p.name;
   val('baseUrl').value = p.baseUrl;
   val('apiKey').value = p.apiKey;
@@ -104,6 +118,7 @@ function buildForm(p: Provider): HTMLElement {
     if (models.length === 0) return fail('请至少填写一个模型');
     await saveProvider({
       ...p, name, baseUrl, apiKey, models,
+      protocol: protoSel.value as ApiProtocol,
       activeModel: models.includes(p.activeModel) ? p.activeModel : models[0]!,
     });
     editingId = null; // 保存后折叠回摘要行
@@ -150,6 +165,74 @@ $('save').addEventListener('click', async () => {
 $('add-provider').addEventListener('click', async () => {
   editingId = 'new';
   await renderProviders();
+});
+
+async function renderImportCandidates(cands: ImportedProvider[]): Promise<void> {
+  const s = await getSettings();
+  const box = $('import-list');
+  box.innerHTML = '';
+  if (cands.length === 0) {
+    const d = document.createElement('div');
+    d.className = 'empty-hint';
+    d.textContent = '未在数据库中找到可导入的供应商';
+    box.appendChild(d);
+    return;
+  }
+  for (const [i, c] of cands.entries()) {
+    const exists = s.providers.some(p => p.baseUrl === c.baseUrl && p.apiKey === c.apiKey);
+    const row = document.createElement('label');
+    row.className = 'import-row';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = !exists;
+    cb.disabled = exists;
+    cb.dataset.idx = String(i);
+    const text = document.createElement('span');
+    text.textContent = `${c.name} · ${c.protocol === 'claude' ? 'Claude' : 'OpenAI'} · ${c.baseUrl}`
+      + `${exists ? '（已存在）' : ''}${c.isCurrent ? '（CC Switch 当前）' : ''}`;
+    row.append(cb, text);
+    box.appendChild(row);
+  }
+  const btn = document.createElement('button');
+  btn.className = 'btn-primary';
+  btn.dataset.act = 'import';
+  btn.textContent = '导入所选';
+  btn.addEventListener('click', async () => {
+    const checked = [...box.querySelectorAll<HTMLInputElement>('input[type="checkbox"]:checked')];
+    let activeId = '';
+    for (const el of checked) {
+      const c = cands[Number(el.dataset.idx)]!;
+      const id = `pv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      await saveProvider({
+        id, name: c.name, protocol: c.protocol, baseUrl: c.baseUrl,
+        apiKey: c.apiKey, models: c.models, activeModel: c.activeModel,
+      });
+      if (c.isCurrent) activeId = id;
+    }
+    if (activeId) await setActiveProvider(activeId);
+    box.innerHTML = '';
+    await renderProviders();
+  });
+  box.appendChild(btn);
+}
+
+$('import-ccswitch').addEventListener('click', () => $('ccswitch-file').click());
+$('ccswitch-file').addEventListener('change', async (e) => {
+  const input = e.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+  const box = $('import-list');
+  try {
+    const rows = await readCcSwitchDb(await file.arrayBuffer());
+    await renderImportCandidates(parseCcSwitchProviders(rows));
+  } catch (err) {
+    box.innerHTML = '';
+    const d = document.createElement('div');
+    d.className = 'form-error';
+    d.textContent = err instanceof Error ? err.message : String(err);
+    box.appendChild(d);
+  }
 });
 
 void loadGlobals().then(renderProviders);

@@ -37,6 +37,13 @@
   .form-error { color: var(--danger); font-size: 12.5px; margin-top: 8px; }
   #add-provider { width: 100%; margin-top: 12px; padding: 9px; border: 1px dashed #ccd1d9; border-radius: 8px; background: none; color: var(--text-secondary); font-size: 13.5px; cursor: pointer; }
   #add-provider:hover { border-color: var(--primary); color: var(--primary); }
+  #import-ccswitch { width: 100%; margin-top: 8px; padding: 9px; border: 1px dashed #ccd1d9; border-radius: 8px; background: none; color: var(--text-secondary); font-size: 13.5px; cursor: pointer; }
+  #import-ccswitch:hover { border-color: var(--primary); color: var(--primary); }
+  .hint { font-size: 12px; color: var(--text-secondary); margin-top: 6px; line-height: 1.5; }
+  .import-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--border); font-weight: 400; }
+  .import-row input[type="checkbox"] { width: auto; margin: 0; flex: none; }
+  #import-list .btn-primary { margin-top: 10px; }
+  #import-list .form-error { padding: 8px 0; }
   .empty-hint { padding: 14px 0; color: var(--text-secondary); font-size: 13px; text-align: center; }
 
   .btn-primary { padding: 9px 22px; border: none; border-radius: 10px; cursor: pointer; background: var(--primary); color: #fff; font-size: 14px; font-weight: 600; }
@@ -53,6 +60,10 @@
       <h2>API 供应商</h2>
       <div id="provider-list"></div>
       <button id="add-provider">+ 添加供应商</button>
+      <button id="import-ccswitch">从 CC Switch 导入</button>
+      <div class="hint">CC Switch 数据库默认位于：Windows C:\Users\&lt;用户名&gt;\.cc-switch\cc-switch.db；macOS / Linux ~/.cc-switch/cc-switch.db</div>
+      <input type="file" id="ccswitch-file" accept=".db" hidden>
+      <div id="import-list"></div>
     </div>
 
     <div class="card">
