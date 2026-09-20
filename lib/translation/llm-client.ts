@@ -39,9 +39,9 @@ async function chatCompletion(cfg: LlmConfig, messages: ChatMessage[], useJsonFo
   }
 }
 
-async function translateSingle(cfg: LlmConfig, text: string, opts: { targetLang: string; systemPrompt: string }, useJsonFormat: boolean, deps: Deps): Promise<string | null> {
+async function translateSingle(cfg: LlmConfig, text: string, opts: { targetLang: string; systemPrompt: string; sourceLang?: string }, useJsonFormat: boolean, deps: Deps): Promise<string | null> {
   try {
-    const content = await chatCompletion(cfg, buildMessages([text], opts.targetLang, opts.systemPrompt, useJsonFormat ? 'json' : 'plain'), useJsonFormat, deps);
+    const content = await chatCompletion(cfg, buildMessages([text], opts.targetLang, opts.systemPrompt, useJsonFormat ? 'json' : 'plain', opts.sourceLang), useJsonFormat, deps);
     const parsed = useJsonFormat ? parseJsonResponse(content, 1) : parsePlainResponse(content, 1);
     return parsed?.[0] ?? null;
   } catch (e) {
@@ -53,17 +53,17 @@ async function translateSingle(cfg: LlmConfig, text: string, opts: { targetLang:
 export async function translateUnits(
   cfg: LlmConfig,
   texts: string[],
-  opts: { targetLang: string; systemPrompt: string; useJsonFormat: boolean },
+  opts: { targetLang: string; systemPrompt: string; useJsonFormat: boolean; sourceLang?: string },
   deps: Deps = {},
 ): Promise<{ translations: (string | null)[]; useJsonFormat: boolean }> {
   let mode = opts.useJsonFormat;
   let content: string;
   try {
-    content = await chatCompletion(cfg, buildMessages(texts, opts.targetLang, opts.systemPrompt, mode ? 'json' : 'plain'), mode, deps);
+    content = await chatCompletion(cfg, buildMessages(texts, opts.targetLang, opts.systemPrompt, mode ? 'json' : 'plain', opts.sourceLang), mode, deps);
   } catch (e) {
     if (e instanceof FormatUnsupportedError) {
       mode = false;
-      content = await chatCompletion(cfg, buildMessages(texts, opts.targetLang, opts.systemPrompt, 'plain'), false, deps);
+      content = await chatCompletion(cfg, buildMessages(texts, opts.targetLang, opts.systemPrompt, 'plain', opts.sourceLang), false, deps);
     } else {
       throw e;
     }

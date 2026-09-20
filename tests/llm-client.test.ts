@@ -68,4 +68,11 @@ describe('translateUnits', () => {
     await expect(translateUnits(CFG, ['A'], OPTS, { fetchImpl, sleep: noSleep })).rejects.toThrow(/500/);
     expect(fetchImpl).toHaveBeenCalledTimes(4); // 首次 + 3 次重试
   });
+
+  it('sourceLang 透传进请求体提示词', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse('{"items":[{"i":0,"t":"甲"}]}')) as any;
+    await translateUnits(CFG, ['A'], { ...OPTS, sourceLang: 'English' }, { fetchImpl, sleep: noSleep });
+    const body = JSON.parse((fetchImpl.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.messages[0].content).toContain('from English to 中文');
+  });
 });

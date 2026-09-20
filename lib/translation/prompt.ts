@@ -3,13 +3,22 @@ export const PROMPT_VERSION = 'v1';
 export interface ChatMessage { role: 'system' | 'user'; content: string }
 export type PromptMode = 'json' | 'plain';
 
-export function buildMessages(texts: string[], targetLang: string, systemPrompt: string, mode: PromptMode): ChatMessage[] {
+export function buildMessages(
+  texts: string[],
+  targetLang: string,
+  systemPrompt: string,
+  mode: PromptMode,
+  sourceLang?: string,
+): ChatMessage[] {
   const numbered = texts.map((t, i) => `[${i}] ${t}`).join('\n\n');
   const format = mode === 'json'
     ? 'Respond with JSON only, no other text: {"items":[{"i":0,"t":"translation of item 0"}]}. Include every input index.'
     : 'Respond with each translation prefixed by the same [i] marker as its input (e.g. [0] translation of item 0), one item per block. No other text.';
+  const langDirective = sourceLang && sourceLang !== 'auto'
+    ? `Translate the following texts from ${sourceLang} to ${targetLang}.`
+    : `Translate the following texts to ${targetLang}.`;
   return [
-    { role: 'system', content: `${systemPrompt}\nTranslate the following texts to ${targetLang}. ${format}` },
+    { role: 'system', content: `${systemPrompt}\n${langDirective} ${format}` },
     { role: 'user', content: numbered },
   ];
 }

@@ -13,6 +13,19 @@ describe('buildMessages', () => {
     expect(plain[0]!.content).toContain('[0]');
     expect(plain[0]!.content).not.toContain('"items"');
   });
+
+  it('sourceLang 为 auto 或缺省时措辞不变', () => {
+    const m1 = buildMessages(['Hello world here'], '中文', 'SYS', 'json', 'auto');
+    const m2 = buildMessages(['Hello world here'], '中文', 'SYS', 'json');
+    expect(m1[0]!.content).toContain('to 中文');
+    expect(m1[0]!.content).not.toContain('from');
+    expect(m2[0]!.content).toBe(m1[0]!.content);
+  });
+
+  it('指定 sourceLang 时生成 from X to Y 措辞', () => {
+    const m = buildMessages(['Hello world here'], '简体中文', 'SYS', 'plain', 'English');
+    expect(m[0]!.content).toContain('from English to 简体中文');
+  });
 });
 
 describe('parseJsonResponse', () => {
