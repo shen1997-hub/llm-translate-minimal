@@ -10,6 +10,8 @@ export interface TranslateRequest {
   taskId: string;
   chunkId: string;
   units: UnitPayload[];
+  /** 逐请求目标语言覆盖（划词双语向）；缺省用 settings.targetLang */
+  targetLang?: string;
 }
 
 export interface TranslateResultItem {

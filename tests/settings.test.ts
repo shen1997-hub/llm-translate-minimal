@@ -46,6 +46,13 @@ describe('默认值与读写', () => {
     expect(apiOriginPattern('http://localhost:11434/v1')).toBe('http://localhost:11434/*');
   });
 
+  it('默认 selectionTranslate 为 true，且可读写', async () => {
+    const s = await getSettings();
+    expect(s.selectionTranslate).toBe(true);
+    await saveSettings({ selectionTranslate: false });
+    expect((await getSettings()).selectionTranslate).toBe(false);
+  });
+
   it('LANGUAGES 含简体中文与 English', () => {
     expect(LANGUAGES).toContain('简体中文');
     expect(LANGUAGES).toContain('English');

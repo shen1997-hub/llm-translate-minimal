@@ -17,6 +17,7 @@ export interface Settings {
   disabledSites: string[];
   minLength: number;
   cjkRatioThreshold: number;
+  selectionTranslate: boolean;
   /** 废弃：仅用于读取合并与旧数据迁移，saveSettings 不再写入 */
   baseUrl: string;
   /** 废弃：同上 */
@@ -40,6 +41,7 @@ export const DEFAULT_SETTINGS: Settings = {
   disabledSites: [],
   minLength: 20,
   cjkRatioThreshold: 0.3,
+  selectionTranslate: true,
   baseUrl: 'https://api.deepseek.com',
   apiKey: '',
   model: 'deepseek-chat',
