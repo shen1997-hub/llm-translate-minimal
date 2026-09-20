@@ -108,4 +108,21 @@ describe('handleTranslateRequest', () => {
     expect(call[0]).toEqual({ baseUrl: 'https://api.test.com', apiKey: 'sk-x', model: 'm1' });
     expect(call[2].sourceLang).toBe('auto');
   });
+
+  it('req.targetLang 覆盖：translate 与 cacheKey 均用覆盖值', async () => {
+    const deps = makeDeps();
+    await handleTranslateRequest({ ...REQ, targetLang: 'English' }, deps);
+    const call = (deps.translate as any).mock.calls[0];
+    expect(call[2].targetLang).toBe('English');
+    const { cacheKey } = await import('../lib/cache/store');
+    const { PROMPT_VERSION } = await import('../lib/translation/prompt');
+    expect(deps.getCached).toHaveBeenCalledWith(cacheKey('Hello world.', PROMPT_VERSION, 'm1', 'English'));
+  });
+
+  it('缺省 targetLang 回退 settings.targetLang', async () => {
+    const deps = makeDeps();
+    await handleTranslateRequest(REQ, deps);
+    const call = (deps.translate as any).mock.calls[0];
+    expect(call[2].targetLang).toBe('中文');
+  });
 });

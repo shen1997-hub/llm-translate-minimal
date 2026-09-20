@@ -20,8 +20,9 @@ export async function handleTranslateRequest(req: TranslateRequest, deps: Schedu
     return { kind: 'error', taskId: req.taskId, chunkId: req.chunkId, code: 'auth', message: '尚未配置 API 供应商，请前往设置页添加' };
   }
   const cfg: LlmConfig = { baseUrl: provider.baseUrl, apiKey: provider.apiKey, model: resolveModel(provider) };
+  const targetLang = req.targetLang ?? settings.targetLang;
   const texts = req.units.map(u => u.text);
-  const keys = texts.map(t => cacheKey(t, PROMPT_VERSION, cfg.model, settings.targetLang));
+  const keys = texts.map(t => cacheKey(t, PROMPT_VERSION, cfg.model, targetLang));
 
   const translations: (string | null)[] = new Array<string | null>(texts.length).fill(null);
   const pendingIdx: number[] = [];
@@ -34,7 +35,7 @@ export async function handleTranslateRequest(req: TranslateRequest, deps: Schedu
   try {
     if (pendingIdx.length > 0) {
       const r = await deps.translate(cfg, pendingIdx.map(i => texts[i]!), {
-        targetLang: settings.targetLang,
+        targetLang,
         systemPrompt: settings.systemPrompt,
         useJsonFormat: deps.jsonFormatSupported.value,
         sourceLang: settings.sourceLang,
