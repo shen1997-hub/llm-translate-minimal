@@ -342,3 +342,30 @@ test('键盘扩选时圆钮跟随新选区尾', async ({ context, extensionId })
     expect(Math.abs(box.y - (expected.y + 6))).toBeLessThan(4);
   }).toPass({ timeout: 5_000 });
 });
+
+test('划词流式：面板先出现译文前缀，收流后补全', async ({ context, extensionId, request }) => {
+  await stubControl(request, 'hold=1');
+  const driver = await openDriver(context, extensionId);
+  const page = await openTestPage(context, driver);
+
+  await page.evaluate(() => {
+    const p = document.querySelector('article p')!;
+    const range = document.createRange();
+    range.selectNodeContents(p);
+    const sel = window.getSelection()!;
+    sel.removeAllRanges();
+    sel.addRange(range);
+    p.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+  });
+
+  await page.locator(`${SEL} .dot`).click();
+  const body = page.locator(`${SEL} .panel .body`);
+  // 挂起在最后一帧之前：此时译文是终值的严格前缀
+  await expect(body).toHaveText('译文', { timeout: 15_000 });
+  // 流式态已经不再是等待态：三点消失，正文换成累积译文
+  expect(await page.locator(`${SEL} .panel .body .dots`).count()).toBe(0);
+
+  await stubControl(request, 'release=1');
+  await expect(body).toHaveText('译文0', { timeout: 15_000 });
+  await stubControl(request, 'reset=1');
+});

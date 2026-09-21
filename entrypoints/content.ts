@@ -264,8 +264,20 @@ function onChunkDelta(msg: Extract<TranslateResponse, { kind: 'delta' }>): void 
   armTimer(entry); // 有增量即续期：只有真卡住 60s 无增量才重发
 }
 
+// 划词流式：增量直接追加到面板正文；最终文本仍以随后的 result 为准
+function onSelDelta(msg: Extract<TranslateResponse, { kind: 'delta' }>): void {
+  if (!selReq || msg.taskId !== selReq.taskId) return; // 陈旧响应：忽略
+  selUI?.appendPanelText(msg.text);
+  armSelTimer(); // 有增量即续期
+}
+
 function onChunkResponse(msg: TranslateResponse): void {
-  if (msg.kind === 'delta') { onChunkDelta(msg); return; }
+  if (msg.kind === 'delta') {
+    // 划词的 delta 归面板，整页的归 host
+    if (msg.taskId.startsWith('sel-')) onSelDelta(msg);
+    else onChunkDelta(msg);
+    return;
+  }
   console.log('[llm-tr] chunk response:', msg.kind, msg.chunkId, msg.kind === 'error' ? `${msg.code}: ${msg.message}` : ''); // [diag]
   if (msg.taskId.startsWith('sel-')) {
     if (!selReq || msg.taskId !== selReq.taskId) return; // 陈旧响应：忽略
@@ -566,6 +578,7 @@ async function onSelDotClick(): Promise<void> {
     chunkId: 'c0',
     units: [{ paragraphId: 'sel', text, sliceIndex: 0, sliceTotal: 1 }],
     targetLang: cjkRatio(text) > 0.5 ? 'English' : s.targetLang,
+    stream: true,
   };
   postToPort(selReq);
   armSelTimer();
