@@ -3,7 +3,8 @@ import { defineConfig } from 'wxt';
 export default defineConfig({
   manifest: {
     name: '极简翻译',
-    permissions: ['storage', 'activeTab'],
+    // scripting：对「扩展安装/更新前就已打开」的页面补注入 content script（自愈）
+    permissions: ['storage', 'activeTab', 'scripting'],
     // 静态 host 权限：安装时一次授予，SW 跨域 fetch 任意 API 域名不再需要运行时授权点击。
     // （content script 本就注入 <all_urls>，安装警告不新增暴露面）
     host_permissions: ['*://*/*'],

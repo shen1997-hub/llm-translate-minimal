@@ -2,6 +2,7 @@ import {
   getSettings, saveSettings, setActiveProvider, setActiveModel,
   getActiveProvider, resolveModel, LANGUAGES,
 } from '../../lib/settings';
+import type { StartTabResponse } from '../../lib/messaging/protocol';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 let state: 'idle' | 'running' | 'done' | 'error' = 'idle';
@@ -113,8 +114,16 @@ $('action').addEventListener('click', async () => {
     return;
   }
   try {
-    await chrome.tabs.sendMessage(currentTabId, { kind: 'start' });
-    setState('running');
+    // 经 background 发送:content script 不在时(安装/更新前已打开的页面)自动补注入再重试
+    if (!currentTabId) currentTabId = (await activeTab())?.id ?? 0; // 防 popup 冷启动竞态
+    const res: StartTabResponse = await chrome.runtime.sendMessage({ kind: 'start-tab', tabId: currentTabId });
+    if (res?.ok) {
+      setState('running');
+    } else {
+      setState('error', res?.reason === 'inject-failed'
+        ? '当前页面不允许扩展注入脚本（浏览器保留页面），请在普通网页上使用'
+        : '无法连接页面脚本，请刷新页面后重试');
+    }
   } catch {
     setState('error', '无法连接页面脚本，请刷新页面后重试');
   }
