@@ -197,3 +197,43 @@ test('设置页从 CC Switch 数据库导入供应商', async ({ context, extens
   await expect(pvRows.nth(1)).toContainText('当前');
   await page.close();
 });
+
+test('整页流式：先流出已完成的段，其余段仍在等待，收流后补全', async ({ context, extensionId, request }) => {
+  // hold=1：桩服务写完前两帧后挂起，用例先断言稳定中间态，再放行最后一帧
+  await stubControl(request, 'hold=1');
+  const driver = await openDriver(context, extensionId);
+  const page = await openTestPage(context, driver);
+
+  await sendToTestPage(driver, { kind: 'start' });
+
+  const bodies = page.locator(`${HOST} .body`);
+  await expect(bodies).toHaveCount(2, { timeout: 15_000 });
+  // 第一段已按增量渲染出完整译文（前缀在流中被逐步追加得到）
+  await expect(bodies.nth(0)).toHaveText('译文0', { timeout: 15_000 });
+  // 此时响应尚未结束：第二段还停在等待态
+  await expect(bodies.nth(1)).toContainText('翻译中');
+  // 等待中的那段是三点脉动，不是静态文字
+  expect(await bodies.nth(1).locator('.dots i').count()).toBe(3);
+
+  await stubControl(request, 'release=1');
+  await expect(bodies.nth(1)).toHaveText('译文1', { timeout: 15_000 });
+  await stubControl(request, 'reset=1');
+});
+
+test('等待态显示三点脉动动画（整页）', async ({ context, extensionId, request }) => {
+  // 延后响应，保证用例观测到的是稳定的等待中态
+  await stubControl(request, 'delay=3000');
+  const driver = await openDriver(context, extensionId);
+  const page = await openTestPage(context, driver);
+
+  await sendToTestPage(driver, { kind: 'start' });
+
+  const dots = page.locator(`${HOST} .body .dots`);
+  await expect(dots.first()).toBeVisible({ timeout: 10_000 });
+  expect(await dots.count()).toBe(2);                            // 两个段落各一处
+  expect(await page.locator(`${HOST} .dots i`).count()).toBe(6);  // 每处三个点
+  // 等待态不该同时显示译文
+  await expect(page.locator(`${HOST} .body`).first()).toHaveText('翻译中…');
+
+  await stubControl(request, 'reset=1');
+});
