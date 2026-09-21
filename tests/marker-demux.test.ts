@@ -39,6 +39,18 @@ describe('createMarkerDemux', () => {
     expect(deltas.flat().join('')).not.toContain('[1');
   });
 
+  it('尾部干净时不 trim 词尾空格（token 常带尾随空格）', () => {
+    // 挂在 flush() 的「尾部干净」分支上：那条路径若被顺手加上 trimEnd，
+    // "Hello " + "world" 就会粘成 "Helloworld"。
+    const { deltas } = collectDeltas(['[0] Hello ', 'world'], 1);
+    expect(deltas.map(d => d[1]).join('')).toBe('Hello world');
+  });
+
+  it('尾部干净时的换行原样吐出，不与标记路径的 trimEnd 混淆', () => {
+    const { deltas } = collectDeltas(['[0] 甲\n\n', '乙'], 1);
+    expect(deltas.map(d => d[1]).join('')).toBe('甲\n\n乙');
+  });
+
   it('finish() 返回全文，可交 parsePlainResponse 权威解析', () => {
     const { text } = collectDeltas(['[0] 甲', '\n\n[', '1] 乙'], 2);
     expect(parsePlainResponse(text, 2)).toEqual(['甲', '乙']);
