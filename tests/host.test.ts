@@ -57,6 +57,35 @@ describe('setHostState', () => {
     setHostState(host, 'error');
     expect(host.shadowRoot!.querySelector('[data-retry]')).not.toBeNull();
   });
+
+  it('loading 态含三点脉动，文案不含三点文本', () => {
+    const d = doc('<div><p>text</p></div>');
+    const host = ensureHost(d.querySelector('p')!, 'h5');
+    setHostState(host, 'loading');
+    const body = host.shadowRoot!.querySelector('.body')!;
+    expect(body.textContent).toBe('翻译中…');
+    expect(body.querySelectorAll('.dots i')).toHaveLength(3);
+  });
+
+  it('streaming 态：正文为累积译文，带 streaming 类（光标由 ::after 画）', () => {
+    const d = doc('<div><p>text</p></div>');
+    const host = ensureHost(d.querySelector('p')!, 'h6');
+    setHostState(host, 'streaming', '半截译文');
+    const body = host.shadowRoot!.querySelector('.body')!;
+    expect(body.className).toBe('body streaming');
+    expect(body.textContent).toBe('半截译文');
+  });
+
+  it('streaming → done 覆盖为权威文本，且不留三点', () => {
+    const d = doc('<div><p>text</p></div>');
+    const host = ensureHost(d.querySelector('p')!, 'h7');
+    setHostState(host, 'streaming', '半截');
+    setHostState(host, 'done', '完整译文');
+    const body = host.shadowRoot!.querySelector('.body')!;
+    expect(body.className).toBe('body done');
+    expect(body.textContent).toBe('完整译文');
+    expect(body.querySelector('.dots')).toBeNull();
+  });
 });
 
 describe('removeAllHosts', () => {

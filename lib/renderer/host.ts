@@ -1,3 +1,5 @@
+import { MOTION_CSS, setLoading } from './motion';
+
 export const HOST_ATTR = 'data-llm-translate-host';
 
 const SHADOW_CSS = `
@@ -7,6 +9,7 @@ const SHADOW_CSS = `
 .body.loading { color: #999; }
 .body.error { border-left-color: #e06c75; color: #e06c75; }
 button[data-retry] { margin-left: 8px; cursor: pointer; }
+${MOTION_CSS}
 @media (prefers-color-scheme: dark) {
   .body { color: #ddd; background: #1e2430; border-left-color: #4a6da7; }
   .body.loading { color: #777; }
@@ -24,7 +27,7 @@ export function ensureHost(after: Element, hostId: string): HTMLElement {
   style.textContent = SHADOW_CSS;
   const body = doc.createElement('div');
   body.className = 'body loading';
-  body.textContent = '翻译中…';
+  setLoading(doc, body);
   shadow.append(style, body);
 
   if (after.tagName === 'LI') {
@@ -47,13 +50,23 @@ export function ensureHost(after: Element, hostId: string): HTMLElement {
   return host;
 }
 
-export function setHostState(host: HTMLElement, state: 'loading' | 'done' | 'error', text?: string): void {
-  const body = host.shadowRoot?.querySelector('.body');
+export function setHostState(
+  host: HTMLElement,
+  state: 'loading' | 'streaming' | 'done' | 'error',
+  text?: string,
+): void {
+  const body = host.shadowRoot?.querySelector<HTMLElement>('.body');
   if (!body) return;
+  const doc = host.ownerDocument;
   body.className = `body ${state}`;
-  body.textContent = state === 'loading' ? '翻译中…' : state === 'error' ? '翻译失败' : (text ?? '');
+  if (state === 'loading') {
+    setLoading(doc, body);
+  } else {
+    // streaming：textContent 保证译文里的尖括号/表情不被当 HTML 解析
+    body.textContent = state === 'error' ? '翻译失败' : (text ?? '');
+  }
   if (state === 'error') {
-    const btn = host.ownerDocument.createElement('button');
+    const btn = doc.createElement('button');
     btn.setAttribute('data-retry', '');
     btn.textContent = '重试';
     body.appendChild(btn);
