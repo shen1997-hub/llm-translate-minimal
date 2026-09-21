@@ -242,6 +242,7 @@ async function startTranslate(): Promise<void> {
 }
 
 function onChunkResponse(msg: TranslateResponse): void {
+  if (msg.kind === 'delta') return; // Task 10/14 起改由增量累积处理
   console.log('[llm-tr] chunk response:', msg.kind, msg.chunkId, msg.kind === 'error' ? `${msg.code}: ${msg.message}` : ''); // [diag]
   if (msg.taskId.startsWith('sel-')) {
     if (!selReq || msg.taskId !== selReq.taskId) return; // 陈旧响应：忽略

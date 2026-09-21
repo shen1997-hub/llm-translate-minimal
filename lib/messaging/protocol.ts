@@ -12,6 +12,8 @@ export interface TranslateRequest {
   units: UnitPayload[];
   /** 逐请求目标语言覆盖（划词双语向）；缺省用 settings.targetLang */
   targetLang?: string;
+  /** 流式：响应过程中先发若干 delta，最终仍以 result 收尾。缺省 false = 一次性响应 */
+  stream?: boolean;
 }
 
 export interface TranslateResultItem {
@@ -23,6 +25,16 @@ export interface TranslateResultItem {
 
 export type TranslateResponse =
   | { kind: 'result'; taskId: string; chunkId: string; translations: TranslateResultItem[] }
+  | {
+      kind: 'delta';
+      taskId: string;
+      chunkId: string;
+      paragraphId: string;
+      sliceIndex: number;
+      sliceTotal: number;
+      /** 该段的增量片段（不是全量），追加到已有文本尾部 */
+      text: string;
+    }
   | { kind: 'error'; taskId: string; chunkId: string; code: 'auth' | 'failed'; message: string };
 
 /** popup → background（runtime 消息）：确保目标页 content script 存活并触发整页翻译 */
