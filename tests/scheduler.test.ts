@@ -164,4 +164,73 @@ describe('handleTranslateRequest', () => {
     expect(r.kind).toBe('result');
     expect(deps.jsonFormatSupported.value).toBe(true);
   });
+
+  it('流式：onDelta 的下标映射回 unit 的 paragraphId/sliceIndex', async () => {
+    const seen: [string, number, number, string][] = [];
+    const deps = makeDeps({
+      translate: vi.fn(async (_cfg: any, texts: string[], _opts: any, _deps: any, onDelta?: any) => {
+        onDelta?.(1, '乙');
+        onDelta?.(0, '甲');
+        return { translations: texts.map((t: string) => `译:${t}`), useJsonFormat: false };
+      }),
+    });
+    const r = await handleTranslateRequest({ ...REQ, stream: true }, deps, (p, s, st, t) => seen.push([p, s, st, t]));
+    expect(r.kind).toBe('result');
+    expect(seen).toEqual([['p1', 0, 1, '乙'], ['p0', 0, 1, '甲']]);
+  });
+
+  it('流式：缓存命中的段落不产生 delta，但下标仍对齐', async () => {
+    const seen: [string, string][] = [];
+    const deps = makeDeps({
+      getCached: (vi.fn(async () => undefined) as any)
+        .mockResolvedValueOnce('缓存译文')
+        .mockResolvedValueOnce(undefined),
+      translate: vi.fn(async (_cfg: any, texts: string[], _opts: any, _deps: any, onDelta?: any) => {
+        expect(texts).toEqual(['Goodbye world.']); // 只翻未命中的那段
+        onDelta?.(0, '乙');
+        return { translations: ['译:Goodbye world.'], useJsonFormat: false };
+      }),
+    });
+    await handleTranslateRequest({ ...REQ, stream: true }, deps, (p, _s, _st, t) => seen.push([p, t]));
+    expect(seen).toEqual([['p1', '乙']]);
+  });
+
+  it('流式：即使返回 useJsonFormat=false 也不翻转 jsonFormatSupported', async () => {
+    const deps = makeDeps({
+      translate: vi.fn(async (_cfg: any, texts: string[], opts: any) => {
+        expect(opts.useJsonFormat).toBe(false); // 流式恒 plain
+        return { translations: texts.map((t: string) => `译:${t}`), useJsonFormat: false };
+      }),
+    });
+    // mock 里的断言一旦不成立会抛错，被调度器的 catch 吞成 error 响应——必须断言是 result，
+    // 否则这条用例在实现之前也会「通过」
+    const r = await handleTranslateRequest({ ...REQ, stream: true }, deps, () => {});
+    expect(r.kind).toBe('result');
+    expect(deps.jsonFormatSupported.value).toBe(true);
+  });
+
+  it('非流式请求（无 onDelta）行为不变：仍按 useJsonFormat=false 记忆降级', async () => {
+    const deps = makeDeps({
+      translate: vi.fn(async (_cfg: any, texts: string[], opts: any, _deps: any, onDelta?: any) => {
+        expect(opts.useJsonFormat).toBe(true); // 非流式仍尊重全局记忆
+        expect(onDelta).toBeUndefined(); // 没传 onDelta 就不该传下去
+        return { translations: texts.map((t: string) => `译:${t}`), useJsonFormat: false };
+      }),
+    });
+    const r = await handleTranslateRequest(REQ, deps);
+    expect(r.kind).toBe('result');
+    expect(deps.jsonFormatSupported.value).toBe(false);
+  });
+
+  it('req.stream 缺省时不传 onDelta（老链路不变成流式）', async () => {
+    const deps = makeDeps({
+      translate: vi.fn(async (_cfg: any, texts: string[], _opts: any, _deps: any, onDelta?: any) => {
+        expect(onDelta).toBeUndefined();
+        return { translations: texts.map((t: string) => `译:${t}`), useJsonFormat: true };
+      }),
+    });
+    const r = await handleTranslateRequest(REQ, deps, () => {});
+    expect(r.kind).toBe('result');
+    expect(deps.jsonFormatSupported.value).toBe(true);
+  });
 });

@@ -13,7 +13,13 @@ export interface SchedulerDeps {
   jsonFormatSupported: { value: boolean };
 }
 
-export async function handleTranslateRequest(req: TranslateRequest, deps: SchedulerDeps): Promise<TranslateResponse> {
+export type DeltaSink = (paragraphId: string, sliceIndex: number, sliceTotal: number, text: string) => void;
+
+export async function handleTranslateRequest(
+  req: TranslateRequest,
+  deps: SchedulerDeps,
+  onDelta?: DeltaSink,
+): Promise<TranslateResponse> {
   const settings = await deps.getSettings();
   const provider = getActiveProvider(settings);
   if (!provider) {
@@ -23,6 +29,9 @@ export async function handleTranslateRequest(req: TranslateRequest, deps: Schedu
   const targetLang = req.targetLang ?? settings.targetLang;
   const texts = req.units.map(u => u.text);
   const keys = texts.map(t => cacheKey(t, PROMPT_VERSION, cfg.model, targetLang));
+
+  // 只有请求显式要求流式、且调用方提供了回调时才走流式；其余保持一次性响应
+  const streaming = req.stream === true && onDelta !== undefined;
 
   const translations: (string | null)[] = new Array<string | null>(texts.length).fill(null);
   const pendingIdx: number[] = [];
@@ -34,13 +43,27 @@ export async function handleTranslateRequest(req: TranslateRequest, deps: Schedu
 
   try {
     if (pendingIdx.length > 0) {
-      const r = await deps.translate(cfg, pendingIdx.map(i => texts[i]!), {
-        targetLang,
-        systemPrompt: settings.systemPrompt,
-        useJsonFormat: deps.jsonFormatSupported.value,
-        sourceLang: settings.sourceLang,
-      });
-      if (!r.useJsonFormat && provider.protocol !== 'claude') deps.jsonFormatSupported.value = false;
+      const r = await deps.translate(
+        cfg,
+        pendingIdx.map(i => texts[i]!),
+        {
+          targetLang,
+          systemPrompt: settings.systemPrompt,
+          useJsonFormat: streaming ? false : deps.jsonFormatSupported.value,
+          sourceLang: settings.sourceLang,
+        },
+        {},
+        // demux 的下标对应 pendingIdx 的第 k 个元素，这里映射回该 unit 的段落与分片信息
+        streaming
+          ? (k: number, text: string) => {
+              const u = req.units[pendingIdx[k]!]!;
+              onDelta!(u.paragraphId, u.sliceIndex, u.sliceTotal, text);
+            }
+          : undefined,
+      );
+      // 流式恒 plain 是「流式解析的必然」而非「该供应商不支持 json」，
+      // 写进全局记忆会把后续非流式请求也永久降级（见 d952590 / 6f7b392）
+      if (!streaming && !r.useJsonFormat && provider.protocol !== 'claude') deps.jsonFormatSupported.value = false;
       for (let k = 0; k < pendingIdx.length; k++) {
         translations[pendingIdx[k]!] = r.translations[k] ?? null;
       }
