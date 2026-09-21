@@ -8,11 +8,20 @@ import { ensureHost, setHostState, removeAllHosts, HOST_ATTR } from '../lib/rend
 import { createSelectionUI, SEL_HOST_ATTR } from '../lib/renderer/selection';
 import type { SelUI } from '../lib/renderer/selection';
 import { getSettings, getActiveProvider, resolveModel } from '../lib/settings';
+import type { ContentScriptContext } from '#imports';
 
 const STATE_ATTR = 'data-llm-translate-state';
 const PID_ATTR = 'data-llm-translate-pid';
 const CHUNK_TIMEOUT_MS = 60_000;
 const MAX_RESENDS = 2;
+
+// 扩展重载/更新后，页面上残留的旧内容脚本会失去扩展上下文，此后任何 chrome.* 调用都
+// 抛 "Extension context invalidated"。在被自愈补注入的新实例接管之前，这个页面上的旧
+// 实例只能自生自灭：所有 chrome 调用点先过这道闸，避免用户手势等入口把未捕获的
+// Promise 异常刷进控制台。
+function contextAlive(): boolean {
+  try { return Boolean(chrome.runtime?.id); } catch { return false; }
+}
 
 interface PendingEntry {
   chunk: TranslateRequest;
@@ -42,16 +51,19 @@ let speaking = false;
 
 export default defineContentScript({
   matches: ['<all_urls>'],
-  main() {
+  main(ctx) {
     chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       if (msg.kind === 'probe') { void probe().then(sendResponse).catch((e) => console.error('[llm-tr] probe failed', e)); return true; } // [diag]
       if (msg.kind === 'start') { void startTranslate().catch((e) => console.error('[llm-tr] start failed', e)); sendResponse({ ok: true }); return; } // [diag]
       if (msg.kind === 'cancel') { cancelTask(); sendResponse({ ok: true }); return; }
       if (msg.kind === 'clear') { clearAll(); sendResponse({ ok: true }); return; }
     });
+    // 自愈补注入时,页面上可能残留孤儿化旧实例的译文 host 与段落标记属性:
+    // 新实例没有任何任务状态,先清空保证从头翻译不漏段。常规首注入为空操作。
+    clearAll();
     console.log('[llm-tr] content script ready', location.href); // [diag]
-    initSelectionTranslate();
-    watchSpaNavigation();
+    initSelectionTranslate(ctx);
+    watchSpaNavigation(ctx);
   },
 });
 
@@ -106,6 +118,7 @@ function connectPort(): chrome.runtime.Port {
 }
 
 function postToPort(req: TranslateRequest): void {
+  if (!contextAlive()) return;
   try {
     connectPort().postMessage(req);
   } catch {
@@ -346,7 +359,7 @@ function startObserver(): void {
   task.observer = new MutationObserver((mutations) => {
     if (mutations.every(isSelfMutation)) return; // 自触发过滤
     clearTimeout(timer);
-    timer = setTimeout(() => void onNewContent(), 300);
+    timer = setTimeout(() => void onNewContent().catch(() => { /* 上下文失效：忽略 */ }), 300);
   });
   task.observer.observe(document.body, { childList: true, subtree: true });
 }
@@ -363,7 +376,7 @@ let extracting = false;
 let incSeq = 0;
 
 async function onNewContent(): Promise<void> {
-  if (!task || task.cancelled || extracting) return;
+  if (!task || task.cancelled || extracting || !contextAlive()) return;
   extracting = true;
   try {
     const fresh = await collectParagraphs();
@@ -394,9 +407,10 @@ function stopObserverOnly(): void {
   if (task) task.observer = null;
 }
 
-function watchSpaNavigation(): void {
+function watchSpaNavigation(ctx: ContentScriptContext): void {
   let lastUrl = location.href;
-  setInterval(() => {
+  // ctx.setInterval：上下文失效后自动停表，残留实例不再空转
+  ctx.setInterval(() => {
     if (location.href !== lastUrl) {
       lastUrl = location.href;
       clearAll();
@@ -409,6 +423,7 @@ function hostId(taskId: string, paragraphId: string): string {
 }
 
 function notify(msg: unknown): void {
+  if (!contextAlive()) return;
   chrome.runtime.sendMessage(msg).catch(() => { /* popup 未打开时忽略 */ });
 }
 
@@ -420,9 +435,9 @@ function armSelTimer(): void {
   }, CHUNK_TIMEOUT_MS);
 }
 
-function initSelectionTranslate(): void {
+function initSelectionTranslate(ctx: ContentScriptContext): void {
   selUI = createSelectionUI(document, {
-    onDotClick: () => void onSelDotClick(),
+    onDotClick: () => void onSelDotClick().catch(() => { /* 上下文失效：忽略 */ }),
     onClose: () => selUI?.hidePanel(),
     onRetry: () => {
       if (!selReq) return;
@@ -441,25 +456,27 @@ function initSelectionTranslate(): void {
     },
   });
 
-  document.addEventListener('mouseup', (e) => {
+  // ctx.addEventListener：上下文失效后监听器自动摘除，残留实例不再响应用户手势
+  ctx.addEventListener(document, 'mouseup', (e) => {
     if (selUI && selUI.pathInside(e.composedPath())) return; // 点击圆钮/浮窗自身的 mouseup 不触发
     void (async () => {
+      if (!contextAlive()) return;
       const s = await getSettings();
       if (!s.selectionTranslate) return;
       if (await currentHostBlacklisted()) return;
       const text = window.getSelection()?.toString().replace(/\s+/g, ' ').trim() ?? '';
       if (text.length < 2) return;
       selUI?.showDot(e.pageX + 8, e.pageY + 8);
-    })();
+    })().catch(() => { /* 上下文失效：忽略 */ });
   });
 
-  document.addEventListener('mousedown', (e) => {
+  ctx.addEventListener(document, 'mousedown', (e) => {
     if (!selUI || selUI.pathInside(e.composedPath())) return;
     selUI.hideDot();
     if (!selUI.isPinned()) selUI.hidePanel();
   });
 
-  document.addEventListener('keydown', (e) => {
+  ctx.addEventListener(document, 'keydown', (e) => {
     if (e.key !== 'Escape' || !selUI) return;
     selUI.hideDot();
     if (!selUI.isPinned()) selUI.hidePanel();
@@ -467,7 +484,7 @@ function initSelectionTranslate(): void {
 }
 
 async function onSelDotClick(): Promise<void> {
-  if (!selUI) return;
+  if (!selUI || !contextAlive()) return;
   const text = window.getSelection()?.toString().replace(/\s+/g, ' ').trim() ?? '';
   selUI.hideDot();
   if (text.length < 2) return; // 选区已取消：不发请求

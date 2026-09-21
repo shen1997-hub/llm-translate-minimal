@@ -160,6 +160,10 @@ $('save').addEventListener('click', async () => {
     blacklist: ($('blacklist') as HTMLTextAreaElement).value.split('\n').map(x => x.trim()).filter(Boolean),
   });
   $('status').textContent = '已保存';
+  // 设置页以内嵌弹窗形式挂在 chrome://extensions（options_ui.open_in_tab=false），
+  // window.close() 由浏览器收起弹窗；若以独立标签页打开，浏览器会忽略该调用，
+  // 此时保留上面的「已保存」提示作为反馈。
+  window.close();
 });
 
 $('add-provider').addEventListener('click', async () => {

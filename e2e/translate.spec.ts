@@ -1,87 +1,9 @@
 import { test, expect } from './fixtures';
-import type { BrowserContext, Page } from '@playwright/test';
+import {
+  HOST, SEL, openDriver, openTestPage, seedSettings, sendToTestPage,
+  stubControl, waitContentScriptReady,
+} from './helpers';
 import { STUB_ORIGIN } from './stub-server';
-
-const HOST = '[data-llm-translate-host]';
-const SEL = '[data-llm-translate-sel]';
-const PAGE_URL = `${STUB_ORIGIN}/page`;
-
-const BASE_SETTINGS = {
-  providers: [{
-    id: 'pv-1', name: 'Stub', baseUrl: STUB_ORIGIN, protocol: 'openai',
-    apiKey: 'sk-test', models: ['m1'], activeModel: 'm1',
-  }],
-  activeProviderId: 'pv-1',
-  sourceLang: 'auto',
-  systemPrompt: 'SYS',
-  targetLang: '中文',
-  blacklist: [],
-  disabledSites: [] as string[],
-  minLength: 20,
-  cjkRatioThreshold: 0.3,
-};
-
-async function seedSettings(context: BrowserContext, extensionId: string, overrides: Record<string, unknown> = {}): Promise<void> {
-  const page = await context.newPage();
-  await page.goto(`chrome-extension://${extensionId}/options.html`);
-  await page.evaluate(
-    (settings) => chrome.storage.local.set({ settings }),
-    { ...BASE_SETTINGS, ...overrides },
-  );
-  // 非用户手势下 request 会被 Chrome 拒绝；new headless 下权限弹窗无法展示，promise 会
-  // 永远悬置，必须加超时兜底。stub 带 CORS 头，无 host 权限也能跑通。
-  await page
-    .evaluate((origin) => {
-      const req = chrome.permissions.request({ origins: [`${origin}/*`] });
-      const timeout = new Promise<false>((resolve) => setTimeout(() => resolve(false), 3000));
-      return Promise.race([req, timeout]);
-    }, STUB_ORIGIN)
-    .catch(() => {});
-  await page.close();
-}
-
-// 扩展页面代理：E2E 无法点击真实 popup，改用 options 页面调 chrome.tabs API 向测试页发消息。
-// 无 tabs 权限时 query 拿不到 url，故向所有 tab 广播，无 content script 的 tab 会抛错被忽略。
-async function sendToTestPage(driver: Page, msg: unknown): Promise<unknown[]> {
-  return driver.evaluate(async (m) => {
-    const tabs = await chrome.tabs.query({});
-    const results: unknown[] = [];
-    for (const t of tabs) {
-      if (t.id === undefined) continue;
-      try {
-        results.push(await chrome.tabs.sendMessage(t.id, m));
-      } catch {
-        // 该 tab 没有注入 content script（扩展页/空白页）
-      }
-    }
-    return results;
-  }, msg);
-}
-
-async function openDriver(context: BrowserContext, extensionId: string): Promise<Page> {
-  const driver = await context.newPage();
-  await driver.goto(`chrome-extension://${extensionId}/options.html`);
-  return driver;
-}
-
-async function waitContentScriptReady(driver: Page): Promise<void> {
-  await expect(async () => {
-    const results = await sendToTestPage(driver, { kind: 'probe' });
-    expect(results.length).toBeGreaterThan(0);
-  }).toPass({ timeout: 10_000 });
-}
-
-async function openTestPage(context: BrowserContext, driver: Page): Promise<Page> {
-  const page = await context.newPage();
-  await page.goto(PAGE_URL);
-  await waitContentScriptReady(driver);
-  return page;
-}
-
-async function stubControl(request: import('@playwright/test').APIRequestContext, query: string): Promise<void> {
-  const res = await request.get(`${STUB_ORIGIN}/__control?${query}`);
-  expect(res.ok()).toBe(true);
-}
 
 test.beforeEach(async ({ context, extensionId, request }) => {
   await stubControl(request, 'reset=1');
@@ -201,7 +123,6 @@ test('划词翻译：选中文本出现圆钮，点击弹出浮窗显示译文',
   await expect(panel).toContainText('译文', { timeout: 15_000 });
 });
 
-
 test('Claude 协议供应商：全文翻译走 /v1/messages', async ({ context, extensionId }) => {
   await seedSettings(context, extensionId, {
     providers: [{
@@ -219,6 +140,42 @@ test('Claude 协议供应商：全文翻译走 /v1/messages', async ({ context, 
   await expect(hosts).toHaveCount(2, { timeout: 15_000 });
   await expect(hosts.first()).toContainText('译文', { timeout: 15_000 });
   await expect(hosts.nth(1)).toContainText('译文');
+});
+
+test('扩展重载后残留内容脚本不再抛未捕获异常', async ({ context, extensionId }) => {
+  const driver = await openDriver(context, extensionId);
+  const page = await openTestPage(context, driver);
+
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+
+  // 重载扩展：页面上已注入的旧内容脚本随之失去扩展上下文（chrome.* 全部失效）
+  await driver.evaluate(() => { chrome.runtime.reload(); return true; });
+  await page.waitForTimeout(500);
+
+  // 任意 mouseup 都会走划词命中路径（读 settings → chrome.storage）
+  await page.mouse.click(20, 20);
+  await page.waitForTimeout(500);
+
+  expect(errors.filter(m => m.includes('Extension context invalidated'))).toEqual([]);
+  await page.close();
+});
+
+test('设置页点保存后收起弹窗（全局项已落盘）', async ({ context, extensionId }) => {
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/options.html`);
+
+  await page.locator('#blacklist').fill('example.com');
+  await page.locator('#save').click();
+
+  // window.close() 负责收起内嵌设置弹窗；Playwright 打开的是普通标签页，浏览器会忽略该调用，
+  // 因此在新页面读 storage 验证落盘（真实弹窗场景下旧页面已被收起，读不到）
+  const probe = await context.newPage();
+  await probe.goto(`chrome-extension://${extensionId}/options.html`);
+  await expect(probe.locator('#blacklist')).toHaveValue('example.com');
+  await page.close();
+  await probe.close();
 });
 
 test('设置页从 CC Switch 数据库导入供应商', async ({ context, extensionId }) => {
