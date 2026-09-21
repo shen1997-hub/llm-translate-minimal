@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8">
+<style>:root{--primary:#e91e63;--primary-hover:#d81b60;--bg:#f2f4f8;--card:#fff;--text:#333;--text-secondary:#999;--border:#eee}*{box-sizing:border-box;margin:0;padding:0}body{background:var(--bg);width:320px;color:var(--text);font-family:system-ui,-apple-system,PingFang SC,Microsoft YaHei,sans-serif;font-size:14px}.header{align-items:center;gap:8px;padding:14px 16px 10px;display:flex}.header .logo{background:var(--primary);color:#fff;border-radius:8px;justify-content:center;align-items:center;width:26px;height:26px;font-size:13px;font-weight:700;display:flex}.header .title{font-size:15px;font-weight:600}.card{background:var(--card);border-radius:12px;margin:8px 12px;padding:4px 14px}.card .row{justify-content:space-between;align-items:center;padding:11px 0;font-size:13.5px;display:flex}.card .row+.row{border-top:1px solid var(--border)}.card .label{color:var(--text-secondary)}.lang-select{max-width:170px;color:var(--text);background:#fafbfc;border:1px solid #dde1e7;border-radius:8px;padding:5px 8px;font-family:inherit;font-size:13px}.lang-select:disabled{color:var(--text-secondary)}.card .row .link{color:var(--primary);cursor:pointer;font-size:13px;text-decoration:none}.switch{flex:none;width:42px;height:24px;position:relative}.switch input{opacity:0;width:0;height:0}.slider{cursor:pointer;background:#ccd1d9;border-radius:24px;transition:background .2s;position:absolute;inset:0}.slider:before{content:"";background:#fff;border-radius:50%;width:20px;height:20px;transition:transform .2s;position:absolute;top:2px;left:2px;box-shadow:0 1px 3px #0003}.switch input:checked+.slider{background:var(--primary)}.switch input:checked+.slider:before{transform:translate(18px)}#estimate,#progress,#message{color:var(--text-secondary);margin-top:6px;padding:0 16px;font-size:12.5px}#message.error{color:#e06c75}.action-wrap{padding:10px 12px 4px}#action{cursor:pointer;background:var(--primary);color:#fff;border:none;border-radius:10px;width:100%;padding:12px;font-size:15px;font-weight:600;transition:background .15s}#action:hover{background:var(--primary-hover)}#action:disabled{cursor:not-allowed;background:#ccd1d9}.chips{gap:10px;padding:10px 12px 6px;display:flex}.chip{background:var(--card);color:var(--text);cursor:pointer;border:none;border-radius:10px;flex:1;justify-content:center;align-items:center;gap:6px;padding:10px 0;font-size:13px;display:flex}.chip:hover{background:#fafbfc}.footer{border-top:1px solid var(--border);background:var(--card);color:var(--text-secondary);justify-content:space-between;align-items:center;margin-top:4px;padding:10px 16px 12px;font-size:12.5px;display:flex}.footer a{color:var(--text-secondary);align-items:center;gap:5px;text-decoration:none;display:flex}.footer a:hover{color:var(--text)}</style>  <script type="module" crossorigin src="/chunks/popup-DWmFuf4B.js"></script>
+  <link rel="modulepreload" crossorigin href="/chunks/settings-bY5ayNrv.js">
+</head>
+<body>
+  <div class="header">
+    <div class="logo">译</div>
+    <div class="title">极简翻译</div>
+  </div>
+
+  <div class="card">
+    <div class="row"><span class="label">原文语言</span><select id="source-lang" class="lang-select"></select></div>
+    <div class="row"><span class="label">目标语言</span><select id="target-lang" class="lang-select"></select></div>
+  </div>
+
+  <div class="card">
+    <div class="row"><span class="label">翻译服务</span><select id="provider-select" class="lang-select"></select><a href="#" id="provider-empty" class="link" hidden>未配置，点击前往设置</a></div>
+    <div class="row" id="model-row"><span class="label">模型</span><select id="model-select" class="lang-select"></select></div>
+    <div class="row">
+      <span>在此站点启用</span>
+      <label class="switch"><input type="checkbox" id="site-toggle" checked><span class="slider"></span></label>
+    </div>
+    <div class="row">
+      <span>划词翻译</span>
+      <label class="switch"><input type="checkbox" id="sel-toggle" checked><span class="slider"></span></label>
+    </div>
+  </div>
+
+  <div id="estimate"></div>
+  <div id="progress"></div>
+  <div id="message"></div>
+
+  <div class="action-wrap">
+    <button id="action">翻译本页</button>
+  </div>
+
+  <div class="chips">
+    <button class="chip" id="clear">✕ 清除本页译文</button>
+  </div>
+
+  <div class="footer">
+    <a href="#" id="open-options">⚙ 设置</a>
+    <span id="version"></span>
+    <span></span>
+  </div>
+</body>
+</html>

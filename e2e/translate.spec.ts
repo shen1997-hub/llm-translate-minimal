@@ -104,7 +104,12 @@ test('划词翻译：选中文本出现圆钮，点击弹出浮窗显示译文',
   const page = await openTestPage(context, driver);
 
   // 构造真实选区并派发 mouseup（Playwright 的 css 选择器可穿透 Shadow DOM）
+  // 前置占位并滚动页面（选区仍落在视口内）：钉死「页面滚动后圆钮仍跟随选区」的回归场景
   await page.evaluate(() => {
+    const spacer = document.createElement('div');
+    spacer.style.height = '800px';
+    document.body.prepend(spacer);
+    window.scrollTo(0, 400);
     const p = document.querySelector('article p')!;
     const range = document.createRange();
     range.selectNodeContents(p);
@@ -118,10 +123,11 @@ test('划词翻译：选中文本出现圆钮，点击弹出浮窗显示译文',
   await expect(dot).toBeVisible({ timeout: 10_000 });
 
   // 圆钮贴「选区尾」，而不是 mouseup 的鼠标坐标 (100,100)
+  // boundingBox 是视口坐标，expected 同样取视口坐标（不加 scrollX/scrollY）
   const expected = await page.evaluate(() => {
     const rects = window.getSelection()!.getRangeAt(0).getClientRects();
     const last = rects[rects.length - 1]!;
-    return { x: last.right + window.scrollX, y: last.bottom + window.scrollY };
+    return { x: last.right, y: last.bottom };
   });
   const dotBox = (await dot.boundingBox())!;
   expect(Math.abs(dotBox.x - (expected.x + 6))).toBeLessThan(4);

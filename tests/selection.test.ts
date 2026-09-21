@@ -46,6 +46,33 @@ describe('createSelectionUI', () => {
     expect(ui.host.shadowRoot!.querySelector('.model')!.textContent).toBe('DeepSeek · deepseek-chat');
   });
 
+  it('滚动页面下 showDot 按视口夹取：文档坐标先换算成视口坐标，夹取后再折算回文档坐标', () => {
+    Object.defineProperty(window, 'scrollX', { value: 0, configurable: true });
+    Object.defineProperty(window, 'scrollY', { value: 500, configurable: true });
+    try {
+      const { ui } = makeUI();
+      ui.showDot(120, 800); // 视口 y = 300，无需夹取
+      expect(ui.host.style.left).toBe('120px');
+      expect(ui.host.style.top).toBe('800px');
+      ui.showDot(120, 500 + 768); // 视口 y = 768，超出下边缘：夹回视口内再折算回文档坐标
+      expect(ui.host.style.top).toBe(`${500 + 768 - 26 - 8}px`);
+    } finally {
+      Object.defineProperty(window, 'scrollX', { value: 0, configurable: true });
+      Object.defineProperty(window, 'scrollY', { value: 0, configurable: true });
+    }
+  });
+
+  it('滚动页面下 showPanel 同样按视口夹取', () => {
+    Object.defineProperty(window, 'scrollY', { value: 500, configurable: true });
+    try {
+      const { ui } = makeUI();
+      ui.showPanel(120, 800, 'm'); // 视口 y = 300，无需夹取（jsdom 无布局，回落 300x160）
+      expect(ui.host.style.top).toBe('800px');
+    } finally {
+      Object.defineProperty(window, 'scrollY', { value: 0, configurable: true });
+    }
+  });
+
   it('setPanelState 三态：loading / done / error（含重试按钮）', () => {
     const { ui } = makeUI();
     ui.showPanel(10, 10, 'm');

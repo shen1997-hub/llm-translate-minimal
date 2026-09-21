@@ -145,10 +145,18 @@ export function createSelectionUI(doc: Document, cbs: SelUICallbacks): SelUI {
   upBtn.addEventListener('click', () => { upBtn.classList.toggle('active'); downBtn.classList.remove('active'); });
   downBtn.addEventListener('click', () => { downBtn.classList.toggle('active'); upBtn.classList.remove('active'); });
 
-  function clampPanel(x: number, y: number): { x: number; y: number } {
+  // 调用方传入的是文档坐标（含滚动偏移），而夹取边界是视口尺寸：
+  // 先换算成视口坐标夹取，再折算回文档坐标，否则页面滚动后会被错误地夹回页面顶部
+  function clampToViewport(x: number, y: number, w: number, h: number): { x: number; y: number } {
     const win = doc.defaultView;
-    return clampPosition(x, y, panel.offsetWidth || 300, panel.offsetHeight || 160,
-      win?.innerWidth ?? 1024, win?.innerHeight ?? 768);
+    const sx = win?.scrollX ?? 0;
+    const sy = win?.scrollY ?? 0;
+    const p = clampPosition(x - sx, y - sy, w, h, win?.innerWidth ?? 1024, win?.innerHeight ?? 768);
+    return { x: p.x + sx, y: p.y + sy };
+  }
+
+  function clampPanel(x: number, y: number): { x: number; y: number } {
+    return clampToViewport(x, y, panel.offsetWidth || 300, panel.offsetHeight || 160);
   }
 
   function hidePanel(): void {
@@ -168,8 +176,7 @@ export function createSelectionUI(doc: Document, cbs: SelUICallbacks): SelUI {
     showDot(x, y) {
       hidePanel();
       // 圆钮贴选区尾，可能落到视口外：夹一下，避免出现在屏幕外
-      const win = doc.defaultView;
-      const p = clampPosition(x, y, 26, 26, win?.innerWidth ?? 1024, win?.innerHeight ?? 768);
+      const p = clampToViewport(x, y, 26, 26);
       host.style.left = `${p.x}px`;
       host.style.top = `${p.y}px`;
       dot.hidden = false;
