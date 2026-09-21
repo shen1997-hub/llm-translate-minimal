@@ -117,7 +117,17 @@ function connectPort(): chrome.runtime.Port {
   return p;
 }
 
+// 重发会把同一段重新流一遍，旧片段不清掉就会与上一次的残留叠字（"译文" + "译文0"）
+function resetChunkBuffers(req: TranslateRequest): void {
+  if (!task) return;
+  for (const u of req.units) {
+    const buf = task.sliceBuffers.get(u.paragraphId);
+    if (buf) buf.parts[u.sliceIndex] = '';
+  }
+}
+
 function postToPort(req: TranslateRequest): void {
+  resetChunkBuffers(req);
   if (!contextAlive()) return;
   try {
     connectPort().postMessage(req);
@@ -230,7 +240,7 @@ async function startTranslate(): Promise<void> {
 
     chunks.forEach((chunk, i) => {
       const req: TranslateRequest = {
-        kind: 'translate', taskId: id, chunkId: `c${i}`,
+        kind: 'translate', taskId: id, chunkId: `c${i}`, stream: true,
         units: chunk.units.map(u => ({ paragraphId: u.paragraphId, text: u.text, sliceIndex: u.sliceIndex, sliceTotal: u.sliceTotal })),
       };
       sendChunk({ chunk: req, retries: 0, timer: null });
@@ -241,8 +251,21 @@ async function startTranslate(): Promise<void> {
   }
 }
 
+// 流式增量：只累积与重渲染，不推进任务计数——完成与否一律以紧随其后的 result 为准
+function onChunkDelta(msg: Extract<TranslateResponse, { kind: 'delta' }>): void {
+  if (!task || msg.taskId !== task.id || task.cancelled) return;
+  const entry = task.pending.get(msg.chunkId);
+  if (!entry) return;
+  const buf = task.sliceBuffers.get(msg.paragraphId) ?? { total: msg.sliceTotal, parts: [] };
+  buf.parts[msg.sliceIndex] = (buf.parts[msg.sliceIndex] ?? '') + msg.text;
+  task.sliceBuffers.set(msg.paragraphId, buf);
+  const host = findHost(task, msg.paragraphId);
+  if (host) setHostState(host, 'streaming', buf.parts.join(''));
+  armTimer(entry); // 有增量即续期：只有真卡住 60s 无增量才重发
+}
+
 function onChunkResponse(msg: TranslateResponse): void {
-  if (msg.kind === 'delta') return; // Task 10/14 起改由增量累积处理
+  if (msg.kind === 'delta') { onChunkDelta(msg); return; }
   console.log('[llm-tr] chunk response:', msg.kind, msg.chunkId, msg.kind === 'error' ? `${msg.code}: ${msg.message}` : ''); // [diag]
   if (msg.taskId.startsWith('sel-')) {
     if (!selReq || msg.taskId !== selReq.taskId) return; // 陈旧响应：忽略
@@ -304,7 +327,7 @@ function retryAllErrors(): void {
     const host = findHost(task, p.id);
     if (host) setHostState(host, 'loading');
     const req: TranslateRequest = {
-      kind: 'translate', taskId: task.id, chunkId: `retry-${pid}`,
+      kind: 'translate', taskId: task.id, chunkId: `retry-${pid}`, stream: true,
       units: [{ paragraphId: p.id, text: p.text, sliceIndex: 0, sliceTotal: 1 }],
     };
     sendChunk({ chunk: req, retries: 0, timer: null });
@@ -324,7 +347,7 @@ document.addEventListener('click', (e) => {
   const host2 = findHost(task, p.id);
   if (host2) setHostState(host2, 'loading');
   const req: TranslateRequest = {
-    kind: 'translate', taskId: task.id, chunkId: `retry-${pid}`,
+    kind: 'translate', taskId: task.id, chunkId: `retry-${pid}`, stream: true,
     units: [{ paragraphId: p.id, text: p.text, sliceIndex: 0, sliceTotal: 1 }],
   };
   sendChunk({ chunk: req, retries: 0, timer: null });
@@ -392,7 +415,7 @@ async function onNewContent(): Promise<void> {
     const batch = incSeq++;
     chunks.forEach((chunk, i) => {
       const req: TranslateRequest = {
-        kind: 'translate', taskId: task!.id, chunkId: `c-inc-${batch}-${i}`,
+        kind: 'translate', taskId: task!.id, chunkId: `c-inc-${batch}-${i}`, stream: true,
         units: chunk.units.map(u => ({ paragraphId: u.paragraphId, text: u.text, sliceIndex: u.sliceIndex, sliceTotal: u.sliceTotal })),
       };
       sendChunk({ chunk: req, retries: 0, timer: null });
