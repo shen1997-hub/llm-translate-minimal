@@ -92,7 +92,9 @@ describe('readSse', () => {
   });
 
   it('\\r 恰好落在 chunk 边界（\\r\\n 被劈开）仍能切帧', async () => {
-    expect(await collect(['data: {"a":1}\r', '\n\r\n'])).toEqual(['{"a":1}']);
+    // 被劈开的 \r\n 必须还原成一个换行：少还原一个就会把「中段的帧」吞掉，
+    // 只靠流末尾的兜底才吐出来（这是单帧输入测不出来的）
+    expect(await collect(['data: {"a":1}\r', '\n\r\ndata: {"b":2}\n\n'])).toEqual(['{"a":1}', '{"b":2}']);
   });
 
   it('多行 data: 以 \\n 拼接；event:/id: 行忽略', async () => {
@@ -156,8 +158,10 @@ export async function readSse(res: Response, onData: (data: string) => void): Pr
     if (done) break;
     let s = decoder.decode(value, { stream: true });
     if (pendingCr) {
-      if (s.startsWith('\n')) s = s.slice(1);
+      // 上个 chunk 末尾的 \r 已经按行结束符扣下了：它可能是被劈开的 \r\n（吃掉下一个 \n），
+      // 也可能是单个 CR。两种情况都要还原成一个 \n，少还原就等于吞掉一个换行。
       pendingCr = false;
+      s = '\n' + (s.startsWith('\n') ? s.slice(1) : s);
     }
     if (s.endsWith('\r')) {
       s = s.slice(0, -1);
@@ -288,9 +292,18 @@ export function createMarkerDemux(expected: number, onDelta: (index: number, tex
   // 吐到安全边界为止：尾部若可能是半截标记就挂起
   function flush(): void {
     const hit = PARTIAL_MARKER_RE.exec(pending);
-    const cut = hit ? hit.index : pending.length;
+    if (!hit) {
+      // 尾部干净：整段照吐。不能 trimEnd——token 常带词尾空格（"Hello " + "world"），
+      // 修剪会把相邻单词粘成 "Helloworld"。
+      emit(pending);
+      pending = '';
+      return;
+    }
+    // 尾部是半截标记：它前面那段空白是段间分隔（"\n\n[1"），跟着标记一起挂起，
+    // 不能单独当成一次增量吐出去。
+    const cut = hit.index;
     if (cut === 0) return;
-    emit(pending.slice(0, cut));
+    emit(pending.slice(0, cut).trimEnd());
     pending = pending.slice(cut);
   }
 
