@@ -220,7 +220,7 @@ test('整页流式：先流出已完成的段，其余段仍在等待，收流�
   await stubControl(request, 'reset=1');
 });
 
-test('等待态显示三点脉动动画（整页）', async ({ context, extensionId, request }) => {
+test('等待态显示三点脉动动画（整页与划词浮窗）', async ({ context, extensionId, request }) => {
   // 延后响应，保证用例观测到的是稳定的等待中态
   await stubControl(request, 'delay=3000');
   const driver = await openDriver(context, extensionId);
@@ -234,6 +234,23 @@ test('等待态显示三点脉动动画（整页）', async ({ context, extensio
   expect(await page.locator(`${HOST} .dots i`).count()).toBe(6);  // 每处三个点
   // 等待态不该同时显示译文
   await expect(page.locator(`${HOST} .body`).first()).toHaveText('翻译中…');
+
+  // 划词浮窗同样有等待动画
+  await page.evaluate(() => {
+    const p = document.querySelector('article p')!;
+    const range = document.createRange();
+    range.selectNodeContents(p);
+    const sel = window.getSelection()!;
+    sel.removeAllRanges();
+    sel.addRange(range);
+    p.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+  });
+  await page.locator(`${SEL} .dot`).click();
+  const panelDots = page.locator(`${SEL} .panel .body .dots i`);
+  await expect(panelDots).toHaveCount(3, { timeout: 10_000 });
+  // 响应到达后换成译文，三点随之撤掉
+  await expect(page.locator(`${SEL} .panel .body`)).toContainText('译文', { timeout: 15_000 });
+  await expect(panelDots).toHaveCount(0);
 
   await stubControl(request, 'reset=1');
 });

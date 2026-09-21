@@ -51,12 +51,70 @@ describe('createSelectionUI', () => {
     ui.showPanel(10, 10, 'm');
     const body = () => ui.host.shadowRoot!.querySelector('.body') as HTMLElement;
     ui.setPanelState('loading');
-    expect(body().textContent).toBe('翻译中…');
+    expect(body().textContent).toBe('翻译中…');            // 三点自身无文本，不掺进 textContent
+    expect(body().querySelectorAll('.dots i')).toHaveLength(3);
     ui.setPanelState('done', '你好世界');
     expect(body().textContent).toBe('你好世界');
+    expect(body().querySelector('.dots')).toBeNull();
     ui.setPanelState('error', 'API Key 无效');
     expect(body().textContent).toContain('API Key 无效');
     expect(body().querySelector('[data-sel-retry]')).not.toBeNull();
+    ui.setPanelState('error', 'API Key 无效');
+    expect(body().querySelectorAll('[data-sel-retry]')).toHaveLength(1); // 重复置错不叠按钮
+  });
+
+  it('appendPanelText：切到流式态并逐段追加，done 时覆盖为权威文本', () => {
+    const { ui } = makeUI();
+    ui.showPanel(10, 10, 'm');
+    ui.setPanelState('loading');
+    const body = () => ui.host.shadowRoot!.querySelector('.body') as HTMLElement;
+    ui.appendPanelText('半截');
+    expect(body().className).toBe('body streaming');
+    expect(body().textContent).toBe('半截');
+    ui.appendPanelText('译文');
+    expect(body().textContent).toBe('半截译文');
+    ui.setPanelState('done', '半截译文（权威）');
+    expect(body().className).toBe('body done');
+    expect(body().textContent).toBe('半截译文（权威）');
+  });
+
+  it('appendPanelText：浮窗关闭时静默忽略；hidePanel 后重新流式从零开始', () => {
+    const { ui } = makeUI();
+    const body = () => ui.host.shadowRoot!.querySelector('.body') as HTMLElement;
+    ui.appendPanelText('丢弃');
+    expect(body().textContent).toBe('翻译中…');
+    ui.showPanel(10, 10, 'm');
+    ui.setPanelState('loading');
+    ui.appendPanelText('甲');
+    ui.hidePanel();
+    ui.showPanel(10, 10, 'm');
+    ui.setPanelState('loading');
+    ui.appendPanelText('乙');
+    expect(body().textContent).toBe('乙');
+  });
+
+  it('浮窗对鼠标透明：面板本身 none，按钮与溢出正文可交互', () => {
+    const { ui } = makeUI();
+    ui.showPanel(10, 10, 'm');
+    const panel = ui.host.shadowRoot!.querySelector('.panel') as HTMLElement;
+    expect(panel.classList.contains('pop')).toBe(true); // 入场动画类
+    // jsdom 不跑布局，scrollHeight/clientHeight 恒为 0 → 判定为不溢出
+    const body = ui.host.shadowRoot!.querySelector('.body') as HTMLElement;
+    expect(body.classList.contains('scrollable')).toBe(false);
+  });
+
+  it('isDotVisible / containsNode', () => {
+    const { ui } = makeUI();
+    expect(ui.isDotVisible()).toBe(false);
+    ui.showDot(10, 10);
+    expect(ui.isDotVisible()).toBe(true);
+    ui.hideDot();
+    expect(ui.isDotVisible()).toBe(false);
+    const inside = ui.host.shadowRoot!.querySelector('.dot')!;
+    expect(ui.containsNode(inside)).toBe(true);
+    expect(ui.containsNode(ui.host)).toBe(true);
+    expect(ui.containsNode(document.body)).toBe(false);
+    expect(ui.containsNode(null)).toBe(false);
   });
 
   it('回调：圆钮点击 / 关闭 / 重试 / 复制(带 done 文本) / 朗读', () => {
