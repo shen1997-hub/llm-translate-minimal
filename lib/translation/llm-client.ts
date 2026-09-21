@@ -1,4 +1,6 @@
 import { buildMessages, parseJsonResponse, parsePlainResponse, type ChatMessage } from './prompt';
+import { readSse } from './sse';
+import { createMarkerDemux } from './marker-demux';
 import type { ApiProtocol } from '../settings';
 
 export interface LlmConfig { baseUrl: string; apiKey: string; model: string; protocol: ApiProtocol }
@@ -7,6 +9,7 @@ export class AuthError extends Error {}
 export class FormatUnsupportedError extends Error {}
 
 interface Deps { fetchImpl?: typeof fetch; sleep?: (ms: number) => Promise<void> }
+export type DeltaHandler = (unitIndex: number, text: string) => void;
 
 const RETRY_DELAYS = [1000, 2000, 4000];
 const defaultSleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
@@ -30,58 +33,104 @@ async function requestWithRetry(
   }
 }
 
-async function openaiChat(cfg: LlmConfig, messages: ChatMessage[], useJsonFormat: boolean, deps: Deps): Promise<string> {
+// 请求构造只有这一处：非流式与流式的差别仅为 body 里的 stream 字段
+function buildRequest(
+  cfg: LlmConfig,
+  messages: ChatMessage[],
+  opts: { useJsonFormat: boolean; stream: boolean },
+): { url: string; init: RequestInit } {
+  if (cfg.protocol === 'claude') {
+    const system = messages.find(m => m.role === 'system')?.content ?? '';
+    const user = messages.filter(m => m.role === 'user').map(m => m.content).join('\n\n');
+    return {
+      url: `${cfg.baseUrl}/v1/messages`,
+      init: {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': cfg.apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: cfg.model, max_tokens: 4096, system,
+          messages: [{ role: 'user', content: user }], temperature: 0.3,
+          ...(opts.stream ? { stream: true } : {}),
+        }),
+      },
+    };
+  }
   const body: Record<string, unknown> = { model: cfg.model, messages, temperature: 0.3 };
-  if (useJsonFormat) body.response_format = { type: 'json_object' };
-  const res = await requestWithRetry(
-    (f) => f(`${cfg.baseUrl}/chat/completions`, {
+  if (opts.useJsonFormat) body.response_format = { type: 'json_object' };
+  if (opts.stream) body.stream = true;
+  return {
+    url: `${cfg.baseUrl}/chat/completions`,
+    init: {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.apiKey}` },
       body: JSON.stringify(body),
-    }),
-    deps,
-  );
+    },
+  };
+}
+
+async function chatCompletion(
+  cfg: LlmConfig,
+  messages: ChatMessage[],
+  useJsonFormat: boolean,
+  deps: Deps,
+): Promise<string> {
+  const { url, init } = buildRequest(cfg, messages, { useJsonFormat: useJsonFormat && cfg.protocol !== 'claude', stream: false });
+  const res = await requestWithRetry((f) => f(url, init), deps);
   if (!res.ok) {
     const text = await res.text();
-    if (res.status === 400 && useJsonFormat && /response_format/i.test(text)) throw new FormatUnsupportedError(text);
+    if (res.status === 400 && useJsonFormat && cfg.protocol !== 'claude' && /response_format/i.test(text)) {
+      throw new FormatUnsupportedError(text);
+    }
     throw new Error(`LLM request failed: ${res.status}: ${text}`);
+  }
+  if (cfg.protocol === 'claude') {
+    const data = await res.json();
+    const blocks = data.content as { type?: string; text?: string }[] | undefined;
+    // 无 text 块 → 返回空串，让上层按解析失败走逐段补齐
+    return blocks?.find(b => b.type === 'text')?.text ?? '';
   }
   const data = await res.json();
   return data.choices[0].message.content as string;
 }
 
-async function claudeChat(cfg: LlmConfig, messages: ChatMessage[], deps: Deps): Promise<string> {
-  const system = messages.find(m => m.role === 'system')?.content ?? '';
-  const user = messages.filter(m => m.role === 'user').map(m => m.content).join('\n\n');
-  const body = {
-    model: cfg.model, max_tokens: 4096, system,
-    messages: [{ role: 'user', content: user }], temperature: 0.3,
-  };
-  const res = await requestWithRetry(
-    (f) => f(`${cfg.baseUrl}/v1/messages`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': cfg.apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify(body),
-    }),
-    deps,
-  );
+// 从一帧 SSE data 里取增量文本；非增量帧（role 帧、ping、message_start 等）返回空串
+function pickDelta(protocol: ApiProtocol, data: string): string {
+  let obj: { [k: string]: any };
+  try {
+    obj = JSON.parse(data);
+  } catch {
+    return '';
+  }
+  if (protocol === 'claude') {
+    if (obj?.type !== 'content_block_delta') return '';
+    return typeof obj?.delta?.text === 'string' ? obj.delta.text : '';
+  }
+  const c = obj?.choices?.[0]?.delta?.content;
+  return typeof c === 'string' ? c : '';
+}
+
+// 流式请求：只把增量喂给 onText，正文由调用方的 demux 负责组装
+async function chatCompletionStream(
+  cfg: LlmConfig,
+  messages: ChatMessage[],
+  deps: Deps,
+  onText: (text: string) => void,
+): Promise<void> {
+  const { url, init } = buildRequest(cfg, messages, { useJsonFormat: false, stream: true });
+  const res = await requestWithRetry((f) => f(url, init), deps);
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`LLM request failed: ${res.status}: ${text}`);
   }
-  const data = await res.json();
-  const blocks = data.content as { type?: string; text?: string }[] | undefined;
-  // 无 text 块 → 返回空串，让上层按解析失败走逐段补齐
-  return blocks?.find(b => b.type === 'text')?.text ?? '';
-}
-
-async function chatCompletion(cfg: LlmConfig, messages: ChatMessage[], useJsonFormat: boolean, deps: Deps): Promise<string> {
-  return cfg.protocol === 'claude' ? claudeChat(cfg, messages, deps) : openaiChat(cfg, messages, useJsonFormat, deps);
+  await readSse(res, (data) => {
+    const t = pickDelta(cfg.protocol, data);
+    if (t !== '') onText(t);
+  });
 }
 
 async function translateSingle(cfg: LlmConfig, text: string, opts: { targetLang: string; systemPrompt: string; sourceLang?: string }, useJsonFormat: boolean, deps: Deps): Promise<string | null> {
@@ -95,12 +144,39 @@ async function translateSingle(cfg: LlmConfig, text: string, opts: { targetLang:
   }
 }
 
+// 流式：恒 plain 标记模式（JSON 无法增量解复用），结束后仍以解析出的全文为准，
+// 缺段走既有逐段补齐（补齐是非流式请求）。
+async function translateUnitsStreaming(
+  cfg: LlmConfig,
+  texts: string[],
+  opts: { targetLang: string; systemPrompt: string; sourceLang?: string },
+  deps: Deps,
+  onDelta: DeltaHandler,
+): Promise<{ translations: (string | null)[]; useJsonFormat: boolean }> {
+  const demux = createMarkerDemux(texts.length, onDelta);
+  await chatCompletionStream(
+    cfg,
+    buildMessages(texts, opts.targetLang, opts.systemPrompt, 'plain', opts.sourceLang),
+    deps,
+    (t) => demux.push(t),
+  );
+  const parsed = parsePlainResponse(demux.finish(), texts.length);
+  const translations: (string | null)[] = parsed ?? new Array(texts.length).fill(null);
+  for (let i = 0; i < translations.length; i++) {
+    if (translations[i] === null) translations[i] = await translateSingle(cfg, texts[i]!, opts, false, deps);
+  }
+  return { translations, useJsonFormat: false };
+}
+
 export async function translateUnits(
   cfg: LlmConfig,
   texts: string[],
   opts: { targetLang: string; systemPrompt: string; useJsonFormat: boolean; sourceLang?: string },
   deps: Deps = {},
+  onDelta?: DeltaHandler,
 ): Promise<{ translations: (string | null)[]; useJsonFormat: boolean }> {
+  if (onDelta) return translateUnitsStreaming(cfg, texts, opts, deps, onDelta);
+
   let mode = opts.useJsonFormat && cfg.protocol !== 'claude'; // Claude 无 response_format，强制 plain
   let content: string;
   try {
