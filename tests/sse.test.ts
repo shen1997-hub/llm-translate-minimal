@@ -46,6 +46,22 @@ describe('readSse', () => {
     expect(await collect(['data: {"a":1}'])).toEqual(['{"a":1}']);
   });
 
+  it('data: 后没有空格也能取出内容', async () => {
+    expect(await collect(['data:{"a":1}\n\n'])).toEqual(['{"a":1}']);
+  });
+
+  it('多字节字符被劈到两个 chunk 也能拼回来', async () => {
+    // 中文流式输出里汉字字节几乎必然被任意切断，这里靠 TextDecoder({stream:true}) 兜住。
+    // 注意必须真的切字节：用两个字符串拼接的话 TextEncoder 各编各的，切不出半个字。
+    const bytes = new TextEncoder().encode('data: 译文\n\n');
+    const stream = new ReadableStream<Uint8Array>({
+      start(c) { c.enqueue(bytes.slice(0, 8)); c.enqueue(bytes.slice(8)); c.close(); },
+    });
+    const out: string[] = [];
+    await readSse(new Response(stream, { status: 200 }), (d) => out.push(d));
+    expect(out).toEqual(['译文']);
+  });
+
   it('body 为 null 时不抛错', async () => {
     const out: string[] = [];
     await readSse(new Response(null, { status: 204 }), (d) => out.push(d));
