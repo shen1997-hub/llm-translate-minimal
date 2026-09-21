@@ -459,6 +459,36 @@ function armSelTimer(): void {
   }, CHUNK_TIMEOUT_MS);
 }
 
+function selectionText(): string {
+  return window.getSelection()?.toString().replace(/\s+/g, ' ').trim() ?? '';
+}
+
+/**
+ * 选区几何锚点：圆钮贴选区尾（最后一段 rect 的右下角），浮窗贴选区首行左下。
+ * 用选区而不是 mouseup 的鼠标坐标——鼠标坐标会停在「上一次选中的文字尾部」。
+ */
+function selectionAnchor(): { x: number; y: number; endX: number; endY: number } | null {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || sel.rangeCount === 0) return null;
+  const rects = Array.from(sel.getRangeAt(0).getClientRects()).filter(r => r.width > 0 || r.height > 0);
+  if (rects.length === 0) return null;
+  const first = rects[0]!;
+  const last = rects[rects.length - 1]!;
+  return {
+    x: first.left + window.scrollX,
+    y: first.bottom + window.scrollY,
+    endX: last.right + window.scrollX,
+    endY: last.bottom + window.scrollY,
+  };
+}
+
+function showDotAtSelection(): void {
+  if (!selUI || selectionText().length < 2) return;
+  const a = selectionAnchor();
+  if (!a) return;
+  selUI.showDot(a.endX + 6, a.endY + 6);
+}
+
 function initSelectionTranslate(ctx: ContentScriptContext): void {
   selUI = createSelectionUI(document, {
     onDotClick: () => void onSelDotClick().catch(() => { /* 上下文失效：忽略 */ }),
@@ -488,9 +518,7 @@ function initSelectionTranslate(ctx: ContentScriptContext): void {
       const s = await getSettings();
       if (!s.selectionTranslate) return;
       if (await currentHostBlacklisted()) return;
-      const text = window.getSelection()?.toString().replace(/\s+/g, ' ').trim() ?? '';
-      if (text.length < 2) return;
-      selUI?.showDot(e.pageX + 8, e.pageY + 8);
+      showDotAtSelection();
     })().catch(() => { /* 上下文失效：忽略 */ });
   });
 
@@ -498,6 +526,19 @@ function initSelectionTranslate(ctx: ContentScriptContext): void {
     if (!selUI || selUI.pathInside(e.composedPath())) return;
     selUI.hideDot();
     if (!selUI.isPinned()) selUI.hidePanel();
+  });
+
+  // 选区变了就说明面板里的译文已经不是「当前这段文本」的译文了；
+  // 但「点击圆钮/浮窗按钮导致选区塌陷」不能算变化，否则浮窗会在打开的瞬间被自己关掉。
+  ctx.addEventListener(document, 'selectionchange', () => {
+    if (!selUI) return;
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
+    if (selUI.containsNode(sel.anchorNode)) return; // 浮窗正文内选中：忽略
+    const text = selectionText();
+    if (text.length < 2) return;
+    if (!selUI.isPinned() && text !== selReq?.units[0]?.text) selUI.hidePanel();
+    if (selUI.isDotVisible()) showDotAtSelection(); // 键盘扩选：圆钮跟随新选区尾
   });
 
   ctx.addEventListener(document, 'keydown', (e) => {
@@ -509,14 +550,15 @@ function initSelectionTranslate(ctx: ContentScriptContext): void {
 
 async function onSelDotClick(): Promise<void> {
   if (!selUI || !contextAlive()) return;
-  const text = window.getSelection()?.toString().replace(/\s+/g, ' ').trim() ?? '';
+  const text = selectionText();
   selUI.hideDot();
   if (text.length < 2) return; // 选区已取消：不发请求
-  const rect = window.getSelection()!.getRangeAt(0).getBoundingClientRect();
+  const anchor = selectionAnchor();
+  if (!anchor) return;
   const s = await getSettings();
   const provider = getActiveProvider(s);
   const model = provider ? `${provider.name} · ${resolveModel(provider)}` : '';
-  selUI.showPanel(rect.left + window.scrollX, rect.bottom + window.scrollY + 6, model);
+  selUI.showPanel(anchor.x, anchor.y + 6, model);
   selUI.setPanelState('loading');
   selReq = {
     kind: 'translate',

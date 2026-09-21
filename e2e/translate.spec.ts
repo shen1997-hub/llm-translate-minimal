@@ -117,6 +117,17 @@ test('划词翻译：选中文本出现圆钮，点击弹出浮窗显示译文',
   const dot = page.locator(`${SEL} .dot`);
   await expect(dot).toBeVisible({ timeout: 10_000 });
 
+  // 圆钮贴「选区尾」，而不是 mouseup 的鼠标坐标 (100,100)
+  const expected = await page.evaluate(() => {
+    const rects = window.getSelection()!.getRangeAt(0).getClientRects();
+    const last = rects[rects.length - 1]!;
+    return { x: last.right + window.scrollX, y: last.bottom + window.scrollY };
+  });
+  const dotBox = (await dot.boundingBox())!;
+  expect(Math.abs(dotBox.x - (expected.x + 6))).toBeLessThan(4);
+  expect(Math.abs(dotBox.y - (expected.y + 6))).toBeLessThan(4);
+  expect(dotBox.x).toBeGreaterThan(200); // 远离鼠标坐标 (100,100)，钉死「不再用鼠标位置」
+
   await dot.click();
   const panel = page.locator(`${SEL} .panel`);
   await expect(panel).toBeVisible();
@@ -253,4 +264,81 @@ test('等待态显示三点脉动动画（整页与划词浮窗）', async ({ co
   await expect(panelDots).toHaveCount(0);
 
   await stubControl(request, 'reset=1');
+});
+
+test('浮窗打开时不遮挡下一段正文的划词（回归）', async ({ context, extensionId }) => {
+  const driver = await openDriver(context, extensionId);
+  const page = await openTestPage(context, driver);
+
+  // 选中第一段 → 点圆钮 → 浮窗落在选区下方，正好盖住第二段所在行的左半部分
+  await page.evaluate(() => {
+    const p = document.querySelector('article p')!;
+    const range = document.createRange();
+    range.selectNodeContents(p);
+    const sel = window.getSelection()!;
+    sel.removeAllRanges();
+    sel.addRange(range);
+    p.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+  });
+  await page.locator(`${SEL} .dot`).click();
+  await expect(page.locator(`${SEL} .panel`)).toBeVisible();
+  await expect(page.locator(`${SEL} .panel`)).toContainText('译文', { timeout: 15_000 });
+
+  const panelBox = (await page.locator(SEL).boundingBox())!;
+  const p2 = (await page.locator('article p').nth(1).boundingBox())!;
+  const y = p2.y + p2.height / 2;
+  // 起手点必须落在浮窗覆盖区内，否则这个用例测不到遮挡
+  expect(panelBox.y).toBeLessThanOrEqual(y);
+  expect(panelBox.y + panelBox.height).toBeGreaterThanOrEqual(y);
+
+  // 从浮窗覆盖区内部起手，长拖到行尾
+  await page.mouse.move(panelBox.x + 4, y);
+  await page.mouse.down();
+  await page.mouse.move(1268, y, { steps: 10 });
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+
+  const selected = await page.evaluate(() => window.getSelection()?.toString() ?? '');
+  expect(selected).toContain('second sufficiently long English paragraph');
+  await expect(page.locator(`${SEL} .dot`)).toBeVisible({ timeout: 10_000 });
+});
+
+test('键盘扩选时圆钮跟随新选区尾', async ({ context, extensionId }) => {
+  const driver = await openDriver(context, extensionId);
+  const page = await openTestPage(context, driver);
+
+  // 先选中第一段的一小段，让圆钮出现
+  await page.evaluate(() => {
+    const text = document.querySelector('article p')!.firstChild!;
+    const range = document.createRange();
+    range.setStart(text, 0);
+    range.setEnd(text, 10);
+    const sel = window.getSelection()!;
+    sel.removeAllRanges();
+    sel.addRange(range);
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+  });
+  await expect(page.locator(`${SEL} .dot`)).toBeVisible({ timeout: 10_000 });
+
+  // 程序化扩大选区（等价于 Shift+方向键）：不派发 mouseup，只发 selectionchange
+  await page.evaluate(() => {
+    const text = document.querySelectorAll('article p')[1]!.firstChild!;
+    const range = document.createRange();
+    range.setStart(text, 0);
+    range.setEnd(text, 24);
+    const sel = window.getSelection()!;
+    sel.removeAllRanges();
+    sel.addRange(range);
+  });
+
+  const expected = await page.evaluate(() => {
+    const rects = window.getSelection()!.getRangeAt(0).getClientRects();
+    const last = rects[rects.length - 1]!;
+    return { x: last.right + window.scrollX, y: last.bottom + window.scrollY };
+  });
+  await expect(async () => {
+    const box = (await page.locator(`${SEL} .dot`).boundingBox())!;
+    expect(Math.abs(box.x - (expected.x + 6))).toBeLessThan(4);
+    expect(Math.abs(box.y - (expected.y + 6))).toBeLessThan(4);
+  }).toPass({ timeout: 5_000 });
 });

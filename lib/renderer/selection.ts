@@ -36,9 +36,13 @@ export function clampPosition(x: number, y: number, w: number, h: number, vw: nu
 
 // 注意：.dot/.panel 的 display 会覆盖 UA 的 [hidden]{display:none}，必须显式补 [hidden] 规则
 const SHADOW_CSS = `
-:host { position: absolute; left: 0; top: 0; z-index: 2147483647; }
+/* 宿主元素自身也要让开鼠标：面板设了 pointer-events:none 只挡住它自己，
+   host 是覆盖同一块区域的可见元素，命中测试仍会落到 host 上——实测 elementFromPoint
+   返回的就是 host，于是「从浮窗上方起手拖拽」依旧选不中正文。 */
+:host { position: absolute; left: 0; top: 0; z-index: 2147483647; pointer-events: none; }
 .dot[hidden], .panel[hidden] { display: none; }
 .dot {
+  pointer-events: auto;
   width: 26px; height: 26px; border-radius: 50%; border: none; cursor: pointer; padding: 0;
   background: #e91e63; color: #fff; font-size: 13px; font-weight: 700;
   display: flex; align-items: center; justify-content: center;
