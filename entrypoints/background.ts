@@ -62,13 +62,34 @@ export default defineBackground(() => {
       console.log('[llm-tr] SW received chunk', msg.chunkId, 'units =', msg.units.length); // [diag]
       await acquire();
       try {
-        const response: TranslateResponse = await handleTranslateRequest(msg, {
-          translate: translateUnits,
-          getCached,
-          setCached,
-          getSettings,
-          jsonFormatSupported,
-        });
+        const response: TranslateResponse = await handleTranslateRequest(
+          msg,
+          {
+            translate: translateUnits,
+            getCached,
+            setCached,
+            getSettings,
+            jsonFormatSupported,
+          },
+          msg.stream
+            ? (paragraphId, sliceIndex, sliceTotal, text) => {
+                // 页面可能在流式过程中导航走了：端口已断时丢弃增量，别让整个请求陪葬
+                try {
+                  port.postMessage({
+                    kind: 'delta',
+                    taskId: msg.taskId,
+                    chunkId: msg.chunkId,
+                    paragraphId,
+                    sliceIndex,
+                    sliceTotal,
+                    text,
+                  } satisfies TranslateResponse);
+                } catch {
+                  /* 端口已断开：增量丢弃 */
+                }
+              }
+            : undefined,
+        );
         console.log('[llm-tr] SW response', msg.chunkId, response.kind, response.kind === 'error' ? `${response.code}: ${response.message}` : ''); // [diag]
         port.postMessage(response);
       } catch (e) {
