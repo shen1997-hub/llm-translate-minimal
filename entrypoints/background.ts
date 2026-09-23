@@ -1,5 +1,5 @@
 import { handleTranslateRequest } from '../lib/translation/scheduler';
-import { translateUnits } from '../lib/translation/llm-client';
+import { translateUnits, lookupWord } from '../lib/translation/llm-client';
 import { getCached, setCached } from '../lib/cache/store';
 import { getSettings } from '../lib/settings';
 import type { StartTabRequest, StartTabResponse, TranslateRequest, TranslateResponse } from '../lib/messaging/protocol';
@@ -66,6 +66,7 @@ export default defineBackground(() => {
           msg,
           {
             translate: translateUnits,
+            lookup: lookupWord,
             getCached,
             setCached,
             getSettings,

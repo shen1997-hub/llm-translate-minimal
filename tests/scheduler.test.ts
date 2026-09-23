@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
-import { handleTranslateRequest, type SchedulerDeps } from '../lib/translation/scheduler';
-import type { TranslateRequest } from '../lib/messaging/protocol';
+import { handleTranslateRequest, handleLookupRequest, type SchedulerDeps } from '../lib/translation/scheduler';
+import type { TranslateRequest, LookupRequest } from '../lib/messaging/protocol';
+import { AuthError } from '../lib/translation/llm-client';
 
 function makeDeps(overrides: Partial<SchedulerDeps> = {}): SchedulerDeps {
   return {
@@ -22,6 +23,7 @@ function makeDeps(overrides: Partial<SchedulerDeps> = {}): SchedulerDeps {
       baseUrl: '', apiKey: '', model: '',
     })),
     jsonFormatSupported: { value: true },
+    lookup: vi.fn(async () => ({ word: 'raise', senses: [], related: [], contextual: 'x' })),
     ...overrides,
   } as unknown as SchedulerDeps;
 }
@@ -232,5 +234,47 @@ describe('handleTranslateRequest', () => {
     const r = await handleTranslateRequest(REQ, deps, () => {});
     expect(r.kind).toBe('result');
     expect(deps.jsonFormatSupported.value).toBe(true);
+  });
+});
+
+const LOOKUP_REQ: LookupRequest = { kind: 'lookup', taskId: 'sel-1', word: 'raise', sentence: 'Please raise your hand.' };
+
+describe('handleLookupRequest', () => {
+  it('正常路径：返回 lookup-result，word 为空时回填请求词', async () => {
+    const deps = makeDeps();
+    (deps.lookup as any).mockResolvedValue({ word: '', senses: [{ pos: 'v.', meaning: '举起' }], related: [], contextual: '本句指举起手' });
+    const r = await handleLookupRequest(LOOKUP_REQ, deps);
+    expect(r.kind).toBe('lookup-result');
+    if (r.kind === 'lookup-result') {
+      expect(r.entry.word).toBe('raise');
+      expect(r.entry.contextual).toBe('本句指举起手');
+    }
+  });
+
+  it('解析失败（null）返回 failed 错误', async () => {
+    const deps = makeDeps();
+    (deps.lookup as any).mockResolvedValue(null);
+    const r = await handleLookupRequest(LOOKUP_REQ, deps);
+    expect(r).toEqual({ kind: 'error', taskId: 'sel-1', code: 'failed', message: '词典响应解析失败，请重试' });
+  });
+
+  it('AuthError 返回 auth 错误', async () => {
+    const deps = makeDeps();
+    (deps.lookup as any).mockRejectedValue(new AuthError('LLM auth failed: 401'));
+    const r = await handleLookupRequest(LOOKUP_REQ, deps);
+    expect(r.kind).toBe('error');
+    if (r.kind === 'error') expect(r.code).toBe('auth');
+  });
+
+  it('未配置供应商返回 auth 错误', async () => {
+    const deps = makeDeps();
+    (deps.getSettings as any).mockResolvedValue({
+      providers: [], activeProviderId: '', sourceLang: 'auto', systemPrompt: 'SYS',
+      targetLang: '中文', blacklist: [], disabledSites: [], minLength: 20,
+      cjkRatioThreshold: 0.3, selectionTranslate: true, baseUrl: '', apiKey: '', model: '',
+    });
+    const r = await handleLookupRequest(LOOKUP_REQ, deps);
+    expect(r.kind).toBe('error');
+    if (r.kind === 'error') expect(r.code).toBe('auth');
   });
 });

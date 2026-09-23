@@ -1,3 +1,5 @@
+import type { WordEntry } from '../translation/prompt';
+
 export interface UnitPayload {
   paragraphId: string;
   text: string;
@@ -50,3 +52,18 @@ export interface StartTabResponse {
   /** inject-failed：浏览器保留页面等无法注入；retry-failed：注入后消息仍不通 */
   reason?: 'inject-failed' | 'retry-failed';
 }
+
+/** content → background（port 消息）：单词/短词组词典查询 */
+export interface LookupRequest {
+  kind: 'lookup';
+  taskId: string;
+  word: string;
+  /** 单词所在句子（语境解释用） */
+  sentence: string;
+  /** 逐请求目标语言覆盖（划词双语向）；缺省用 settings.targetLang */
+  targetLang?: string;
+}
+
+export type LookupResponse =
+  | { kind: 'lookup-result'; taskId: string; entry: WordEntry }
+  | { kind: 'error'; taskId: string; code: 'auth' | 'failed'; message: string };

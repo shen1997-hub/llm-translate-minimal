@@ -1,5 +1,5 @@
-import type { TranslateRequest, TranslateResponse } from '../messaging/protocol';
-import { translateUnits, AuthError, type LlmConfig } from './llm-client';
+import type { TranslateRequest, TranslateResponse, LookupRequest, LookupResponse } from '../messaging/protocol';
+import { translateUnits, lookupWord, AuthError, type LlmConfig } from './llm-client';
 import { PROMPT_VERSION } from './prompt';
 import { cacheKey } from '../cache/store';
 import { getActiveProvider, resolveModel } from '../settings';
@@ -7,6 +7,7 @@ import type { Settings } from '../settings';
 
 export interface SchedulerDeps {
   translate: typeof translateUnits;
+  lookup: typeof lookupWord;
   getCached: (key: string) => Promise<string | undefined>;
   setCached: (key: string, translation: string, meta: { model: string; promptVersion: string }) => Promise<void>;
   getSettings: () => Promise<Settings>;
@@ -94,4 +95,30 @@ export async function handleTranslateRequest(
       text: translations[i]!,
     })),
   };
+}
+
+export async function handleLookupRequest(
+  req: LookupRequest,
+  deps: SchedulerDeps,
+): Promise<LookupResponse> {
+  const settings = await deps.getSettings();
+  const provider = getActiveProvider(settings);
+  if (!provider) {
+    return { kind: 'error', taskId: req.taskId, code: 'auth', message: '尚未配置 API 供应商，请前往设置页添加' };
+  }
+  const cfg: LlmConfig = { baseUrl: provider.baseUrl, apiKey: provider.apiKey, model: resolveModel(provider), protocol: provider.protocol };
+  try {
+    const entry = await deps.lookup(cfg, req.word, req.sentence, {
+      targetLang: req.targetLang ?? settings.targetLang,
+      useJsonFormat: deps.jsonFormatSupported.value,
+    });
+    if (!entry) return { kind: 'error', taskId: req.taskId, code: 'failed', message: '词典响应解析失败，请重试' };
+    if (entry.word === '') entry.word = req.word;
+    return { kind: 'lookup-result', taskId: req.taskId, entry };
+  } catch (e) {
+    if (e instanceof AuthError) {
+      return { kind: 'error', taskId: req.taskId, code: 'auth', message: 'API Key 无效或权限不足，请检查设置页' };
+    }
+    return { kind: 'error', taskId: req.taskId, code: 'failed', message: e instanceof Error ? e.message : String(e) };
+  }
 }
