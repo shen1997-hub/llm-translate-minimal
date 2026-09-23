@@ -61,3 +61,55 @@ export function parsePlainResponse(content: string, expected: number): (string |
   }
   return result;
 }
+
+export interface WordEntry {
+  word: string;
+  phonetic?: string;
+  senses: { pos: string; meaning: string }[];
+  related: { word: string; note: string }[];
+  contextual: string;
+}
+
+export function buildLookupMessages(word: string, sentence: string, targetLang: string): ChatMessage[] {
+  const schema = '{"word":"the word","phonetic":"IPA transcription, empty string if not applicable","senses":[{"pos":"part of speech","meaning":"meaning in ' + targetLang + '"}],"related":[{"word":"related word","note":"relation tag + short gloss, e.g. \\"syn. 举起\\""}],"contextual":"explanation of the word as used in the given sentence, in ' + targetLang + '"}';
+  return [
+    {
+      role: 'system',
+      content: `You are a dictionary. Explain the given word or short phrase in ${targetLang}. "senses" lists each part of speech with its meanings; "related" lists synonyms/antonyms/derivatives; "contextual" explains the meaning in the given sentence. Respond with JSON only, no other text: ${schema}`,
+    },
+    { role: 'user', content: `Word: ${word}\nSentence: ${sentence}` },
+  ];
+}
+
+export function parseLookupResponse(content: string): WordEntry | null {
+  const cleaned = content.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch {
+    return null;
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const o = parsed as { word?: unknown; phonetic?: unknown; senses?: unknown; related?: unknown; contextual?: unknown };
+  const senses = Array.isArray(o.senses)
+    ? o.senses.filter((s): s is { pos: string; meaning: string } =>
+        typeof s === 'object' && s !== null
+        && typeof (s as { pos?: unknown }).pos === 'string'
+        && typeof (s as { meaning?: unknown }).meaning === 'string')
+    : [];
+  const related = Array.isArray(o.related)
+    ? o.related.filter((r): r is { word: string; note: string } =>
+        typeof r === 'object' && r !== null
+        && typeof (r as { word?: unknown }).word === 'string'
+        && typeof (r as { note?: unknown }).note === 'string')
+    : [];
+  const contextual = typeof o.contextual === 'string' ? o.contextual : '';
+  if (senses.length === 0 && contextual === '') return null;
+  return {
+    word: typeof o.word === 'string' ? o.word : '',
+    phonetic: typeof o.phonetic === 'string' && o.phonetic !== '' ? o.phonetic : undefined,
+    senses,
+    related,
+    contextual,
+  };
+}
