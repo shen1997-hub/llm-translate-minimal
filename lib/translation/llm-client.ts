@@ -209,13 +209,12 @@ export async function lookupWord(
   opts: { targetLang: string; useJsonFormat: boolean },
   deps: Deps = {},
 ): Promise<WordEntry | null> {
-  let mode = opts.useJsonFormat && cfg.protocol !== 'claude'; // Claude 无 response_format
+  const mode = opts.useJsonFormat && cfg.protocol !== 'claude'; // Claude 无 response_format
   let content: string;
   try {
     content = await chatCompletion(cfg, buildLookupMessages(word, sentence, opts.targetLang), mode, deps);
   } catch (e) {
     if (e instanceof FormatUnsupportedError) {
-      mode = false;
       content = await chatCompletion(cfg, buildLookupMessages(word, sentence, opts.targetLang), false, deps);
     } else {
       throw e;

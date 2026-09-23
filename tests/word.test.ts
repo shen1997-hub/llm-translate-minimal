@@ -19,6 +19,11 @@ describe('isWordLike', () => {
     expect(isWordLike('hello.')).toBe(false);
     expect(isWordLike('什么？')).toBe(false);
   });
+  it('含逗号/顿号/冒号不判定为单词', () => {
+    expect(isWordLike('yes, please')).toBe(false);
+    expect(isWordLike('你好，世界')).toBe(false);
+    expect(isWordLike('注：')).toBe(false);
+  });
   it('空白与超长输入不判定为单词', () => {
     expect(isWordLike('   ')).toBe(false);
     expect(isWordLike('x'.repeat(61))).toBe(false);

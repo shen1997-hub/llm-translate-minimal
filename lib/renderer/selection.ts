@@ -184,7 +184,7 @@ export function createSelectionUI(doc: Document, cbs: SelUICallbacks): SelUI {
   }
 
   function clampPanel(x: number, y: number): { x: number; y: number } {
-    return clampToViewport(x, y, panel.offsetWidth || 300, panel.offsetHeight || 160);
+    return clampToViewport(x, y, panel.offsetWidth || 340, panel.offsetHeight || 160);
   }
 
   function hidePanel(): void {

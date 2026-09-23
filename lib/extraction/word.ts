@@ -1,4 +1,4 @@
-const SENTENCE_PUNCT_RE = /[.!?。！？；;]/;
+const SENTENCE_PUNCT_RE = /[.!?。！？；;，,、：:]/;
 const SENTENCE_BOUNDARY_RE = /[.!?。！？；;\n]/;
 const MAX_WORD_LEN = 60;
 const MAX_SENTENCE_LEN = 300;

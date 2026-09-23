@@ -483,7 +483,7 @@ function armSelTimer(): void {
   if (selTimer !== null) clearTimeout(selTimer);
   selTimer = setTimeout(() => {
     selTimer = null;
-    selUI?.setPanelState('error', '翻译超时，请重试');
+    selUI?.setPanelState('error', lookupReq !== null ? '查询超时，请重试' : '翻译超时，请重试');
   }, CHUNK_TIMEOUT_MS);
 }
 
