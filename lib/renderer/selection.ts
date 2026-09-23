@@ -1,4 +1,5 @@
 import { MOTION_CSS, replayPop, setLoading } from './motion';
+import type { WordEntry } from '../translation/prompt';
 
 export const SEL_HOST_ATTR = 'data-llm-translate-sel';
 
@@ -19,12 +20,24 @@ export interface SelUI {
   setPanelState(state: 'loading' | 'done' | 'error', text?: string): void;
   /** 流式增量：切到流式态并追加到面板正文尾部 */
   appendPanelText(text: string): void;
+  /** 词典模式：结构化渲染单词卡片（音标/义项/关联词/语境） */
+  showWordCard(entry: WordEntry): void;
   hidePanel(): void;
   isPinned(): boolean;
   pathInside(path: EventTarget[]): boolean;
   /** 节点是否属于本 UI（含 Shadow DOM 内部）：用于忽略浮窗内的选区变化 */
   containsNode(node: Node | null): boolean;
   destroy(): void;
+}
+
+/** 词典卡片的复制纯文本：单词+音标+义项+关联词+语境逐行 */
+export function formatWordEntryText(entry: WordEntry): string {
+  const lines: string[] = [];
+  lines.push(entry.phonetic ? `${entry.word} ${entry.phonetic}` : entry.word);
+  for (const s of entry.senses) lines.push(`${s.pos} ${s.meaning}`);
+  if (entry.related.length > 0) lines.push(`关联词：${entry.related.map(r => `${r.word}(${r.note})`).join('，')}`);
+  if (entry.contextual !== '') lines.push(`本句中：${entry.contextual}`);
+  return lines.join('\n');
 }
 
 export function clampPosition(x: number, y: number, w: number, h: number, vw: number, vh: number): { x: number; y: number } {
@@ -49,7 +62,7 @@ const SHADOW_CSS = `
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 .panel {
-  width: 300px; border-radius: 12px; background: #fff; color: #333;
+  width: 340px; border-radius: 12px; background: #fff; color: #333;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
   font: 13.5px/1.6 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
   overflow: hidden; pointer-events: none;
@@ -68,6 +81,17 @@ const SHADOW_CSS = `
 .body.scrollable { pointer-events: auto; }
 .body button[data-sel-retry] { margin-left: 8px; cursor: pointer; border: 1px solid #e06c75;
   background: transparent; color: #e06c75; border-radius: 6px; padding: 1px 8px; font-size: 12px; }
+.word-head { display: flex; align-items: baseline; gap: 8px; padding-bottom: 4px; }
+.word-head .w { font-size: 18px; font-weight: 700; }
+.word-head .phonetic { color: #999; font-size: 12.5px; }
+.word-section { padding: 4px 0; }
+.word-section + .word-section { border-top: 1px solid #f0f0f0; }
+.sec-title { font-size: 11.5px; color: #999; margin-bottom: 2px; }
+.sense { display: flex; gap: 6px; }
+.sense .pos { color: #e91e63; font-style: italic; min-width: 32px; }
+.related-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { background: #f4f4f6; border-radius: 10px; padding: 1px 8px; font-size: 12px; }
+.contextual { background: #faf6f8; border-radius: 8px; padding: 6px 8px; }
 .footer { display: flex; gap: 4px; padding: 6px 10px; border-top: 1px solid #f0f0f0; }
 .footer button { border: none; background: none; cursor: pointer; font-size: 14px; padding: 2px 6px; opacity: 0.7; }
 .footer button.active { opacity: 1; }
@@ -75,6 +99,9 @@ ${MOTION_CSS}
 @media (prefers-color-scheme: dark) {
   .panel { background: #23272f; color: #ddd; }
   .header, .footer { border-color: #383c44; }
+  .word-section + .word-section { border-color: #383c44; }
+  .chip { background: #33373f; }
+  .contextual { background: #2b2f38; }
 }`;
 
 export function createSelectionUI(doc: Document, cbs: SelUICallbacks): SelUI {
@@ -120,6 +147,7 @@ export function createSelectionUI(doc: Document, cbs: SelUICallbacks): SelUI {
   let pinned = false;
   let streaming = false; // 处于流式追加态：正文里是「累积的增量」而非权威文本
   let lastText = '';
+  let speakText = ''; // 词典卡片朗读单词本身；为空则朗读 lastText
   let copyTimer: ReturnType<typeof setTimeout> | null = null;
 
   // 溢出才恢复滚动：短译文保持 pointer-events:none，彻底让开下方正文
@@ -141,7 +169,7 @@ export function createSelectionUI(doc: Document, cbs: SelUICallbacks): SelUI {
     if (copyTimer !== null) clearTimeout(copyTimer);
     copyTimer = setTimeout(() => { copyBtn.textContent = '📋'; copyTimer = null; }, 1500);
   });
-  panel.querySelector('.speak')!.addEventListener('click', () => cbs.onSpeak(lastText));
+  panel.querySelector('.speak')!.addEventListener('click', () => cbs.onSpeak(speakText || lastText));
   upBtn.addEventListener('click', () => { upBtn.classList.toggle('active'); downBtn.classList.remove('active'); });
   downBtn.addEventListener('click', () => { downBtn.classList.toggle('active'); upBtn.classList.remove('active'); });
 
@@ -164,6 +192,7 @@ export function createSelectionUI(doc: Document, cbs: SelUICallbacks): SelUI {
     pinned = false;
     streaming = false;
     lastText = '';
+    speakText = '';
     pinBtn.classList.remove('active');
     upBtn.classList.remove('active');
     downBtn.classList.remove('active');
@@ -196,6 +225,7 @@ export function createSelectionUI(doc: Document, cbs: SelUICallbacks): SelUI {
     },
     setPanelState(state, text) {
       streaming = false;
+      speakText = '';
       bodyEl.className = `body ${state}`;
       if (state === 'loading') {
         setLoading(doc, bodyEl);
@@ -222,6 +252,72 @@ export function createSelectionUI(doc: Document, cbs: SelUICallbacks): SelUI {
       }
       lastText += text;
       bodyEl.textContent = lastText;
+      toggleScrollable();
+    },
+    showWordCard(entry) {
+      streaming = false;
+      lastText = formatWordEntryText(entry);
+      speakText = entry.word;
+      bodyEl.className = 'body';
+      bodyEl.textContent = '';
+      const head = doc.createElement('div');
+      head.className = 'word-head';
+      const w = doc.createElement('span');
+      w.className = 'w';
+      w.textContent = entry.word;
+      head.appendChild(w);
+      if (entry.phonetic) {
+        const p = doc.createElement('span');
+        p.className = 'phonetic';
+        p.textContent = entry.phonetic;
+        head.appendChild(p);
+      }
+      bodyEl.appendChild(head);
+      if (entry.senses.length > 0) {
+        const sec = doc.createElement('div');
+        sec.className = 'word-section';
+        for (const s of entry.senses) {
+          const row = doc.createElement('div');
+          row.className = 'sense';
+          const pos = doc.createElement('span');
+          pos.className = 'pos';
+          pos.textContent = s.pos;
+          const meaning = doc.createElement('span');
+          meaning.textContent = s.meaning;
+          row.append(pos, meaning);
+          sec.appendChild(row);
+        }
+        bodyEl.appendChild(sec);
+      }
+      if (entry.related.length > 0) {
+        const sec = doc.createElement('div');
+        sec.className = 'word-section';
+        const title = doc.createElement('div');
+        title.className = 'sec-title';
+        title.textContent = '关联词';
+        const chips = doc.createElement('div');
+        chips.className = 'related-chips';
+        for (const r of entry.related) {
+          const chip = doc.createElement('span');
+          chip.className = 'chip';
+          chip.textContent = `${r.word} ${r.note}`;
+          chips.appendChild(chip);
+        }
+        sec.append(title, chips);
+        bodyEl.appendChild(sec);
+      }
+      if (entry.contextual !== '') {
+        const sec = doc.createElement('div');
+        sec.className = 'word-section';
+        const title = doc.createElement('div');
+        title.className = 'sec-title';
+        title.textContent = '本句中';
+        const box = doc.createElement('div');
+        box.className = 'contextual';
+        box.textContent = entry.contextual;
+        sec.append(title, box);
+        bodyEl.appendChild(sec);
+      }
       toggleScrollable();
     },
     hidePanel,
