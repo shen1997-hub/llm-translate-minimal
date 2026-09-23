@@ -1,9 +1,10 @@
 import { findContentRoot } from '../lib/extraction/scoring';
 import { extractParagraphs, browserIsVisible, cjkRatio } from '../lib/extraction/paragraphs';
 import { siteRuleFor } from '../lib/extraction/site-rules';
+import { isWordLike, extractSentence } from '../lib/extraction/word';
 import type { Paragraph } from '../lib/extraction/paragraphs';
 import { buildChunks } from '../lib/translation/chunking';
-import type { TranslateRequest, TranslateResponse } from '../lib/messaging/protocol';
+import type { TranslateRequest, TranslateResponse, LookupRequest, LookupResponse } from '../lib/messaging/protocol';
 import { ensureHost, setHostState, removeAllHosts, HOST_ATTR } from '../lib/renderer/host';
 import { createSelectionUI, SEL_HOST_ATTR } from '../lib/renderer/selection';
 import type { SelUI } from '../lib/renderer/selection';
@@ -46,6 +47,8 @@ let port: chrome.runtime.Port | null = null;
 let pidSeq = 0;
 let selUI: SelUI | null = null;
 let selReq: TranslateRequest | null = null; // 最后一次划词请求，供重试重发
+let lookupReq: LookupRequest | null = null; // 最后一次词典查询请求，供重试重发
+let selText = ''; // 当前面板对应的选中文本（判断选区是否变化）
 let selTimer: ReturnType<typeof setTimeout> | null = null;
 let speaking = false;
 
@@ -102,7 +105,7 @@ async function probe() {
 function connectPort(): chrome.runtime.Port {
   if (port) return port;
   const p = chrome.runtime.connect({ name: 'translate' });
-  p.onMessage.addListener((msg: TranslateResponse) => onChunkResponse(msg));
+  p.onMessage.addListener((msg: TranslateResponse | LookupResponse) => onChunkResponse(msg));
   p.onDisconnect.addListener(() => {
     if (port === p) port = null;
     // SW 被终止导致断开：重连并重发未完成分块（幂等）
@@ -126,8 +129,8 @@ function resetChunkBuffers(req: TranslateRequest): void {
   }
 }
 
-function postToPort(req: TranslateRequest): void {
-  resetChunkBuffers(req);
+function postToPort(req: TranslateRequest | LookupRequest): void {
+  if (req.kind === 'translate') resetChunkBuffers(req);
   if (!contextAlive()) return;
   try {
     connectPort().postMessage(req);
@@ -271,11 +274,24 @@ function onSelDelta(msg: Extract<TranslateResponse, { kind: 'delta' }>): void {
   armSelTimer(); // 有增量即续期
 }
 
-function onChunkResponse(msg: TranslateResponse): void {
+function onChunkResponse(msg: TranslateResponse | LookupResponse): void {
+  if (msg.kind === 'lookup-result') {
+    if (!lookupReq || msg.taskId !== lookupReq.taskId) return; // 陈旧响应：忽略
+    if (selTimer !== null) { clearTimeout(selTimer); selTimer = null; }
+    selUI?.showWordCard(msg.entry);
+    return;
+  }
   if (msg.kind === 'delta') {
     // 划词的 delta 归面板，整页的归 host
     if (msg.taskId.startsWith('sel-')) onSelDelta(msg);
     else onChunkDelta(msg);
+    return;
+  }
+  // lookup 的错误响应没有 chunkId 字段，以此与 translate 错误区分
+  if (!('chunkId' in msg)) {
+    if (!lookupReq || msg.taskId !== lookupReq.taskId) return; // 陈旧响应：忽略
+    if (selTimer !== null) { clearTimeout(selTimer); selTimer = null; }
+    selUI?.setPanelState('error', msg.message);
     return;
   }
   console.log('[llm-tr] chunk response:', msg.kind, msg.chunkId, msg.kind === 'error' ? `${msg.code}: ${msg.message}` : ''); // [diag]
@@ -506,9 +522,10 @@ function initSelectionTranslate(ctx: ContentScriptContext): void {
     onDotClick: () => void onSelDotClick().catch(() => { /* 上下文失效：忽略 */ }),
     onClose: () => selUI?.hidePanel(),
     onRetry: () => {
-      if (!selReq) return;
+      const req = lookupReq ?? selReq;
+      if (!req) return;
       selUI?.setPanelState('loading');
-      postToPort(selReq);
+      postToPort(req);
       armSelTimer();
     },
     onCopy: (text) => { void navigator.clipboard.writeText(text).catch(() => {}); },
@@ -549,7 +566,7 @@ function initSelectionTranslate(ctx: ContentScriptContext): void {
     if (selUI.containsNode(sel.anchorNode)) return; // 浮窗正文内选中：忽略
     const text = selectionText();
     if (text.length < 2) return;
-    if (!selUI.isPinned() && text !== selReq?.units[0]?.text) selUI.hidePanel();
+    if (!selUI.isPinned() && text !== selText) selUI.hidePanel();
     if (selUI.isDotVisible()) showDotAtSelection(); // 键盘扩选：圆钮跟随新选区尾
   });
 
@@ -572,14 +589,25 @@ async function onSelDotClick(): Promise<void> {
   const model = provider ? `${provider.name} · ${resolveModel(provider)}` : '';
   selUI.showPanel(anchor.x, anchor.y + 6, model);
   selUI.setPanelState('loading');
-  selReq = {
-    kind: 'translate',
-    taskId: `sel-${Date.now()}`,
-    chunkId: 'c0',
-    units: [{ paragraphId: 'sel', text, sliceIndex: 0, sliceTotal: 1 }],
-    targetLang: cjkRatio(text) > 0.5 ? 'English' : s.targetLang,
-    stream: true,
-  };
-  postToPort(selReq);
+  selText = text;
+  const targetLang = cjkRatio(text) > 0.5 ? 'English' : s.targetLang;
+  if (isWordLike(text)) {
+    const sel = window.getSelection();
+    const sentence = sel && sel.rangeCount > 0 ? extractSentence(sel.getRangeAt(0)) : text;
+    lookupReq = { kind: 'lookup', taskId: `sel-${Date.now()}`, word: text, sentence, targetLang };
+    selReq = null;
+    postToPort(lookupReq);
+  } else {
+    selReq = {
+      kind: 'translate',
+      taskId: `sel-${Date.now()}`,
+      chunkId: 'c0',
+      units: [{ paragraphId: 'sel', text, sliceIndex: 0, sliceTotal: 1 }],
+      targetLang,
+      stream: true,
+    };
+    lookupReq = null;
+    postToPort(selReq);
+  }
   armSelTimer();
 }
