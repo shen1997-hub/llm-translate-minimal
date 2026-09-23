@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { translateUnits, AuthError } from '../lib/translation/llm-client';
+import { translateUnits, lookupWord, AuthError } from '../lib/translation/llm-client';
 
 const CFG = { baseUrl: 'https://api.test.com', apiKey: 'sk-x', model: 'm1', protocol: 'openai' as const };
 const OPTS = { targetLang: '中文', systemPrompt: 'SYS', useJsonFormat: true };
@@ -204,5 +204,43 @@ describe('translateUnits（Claude 协议）', () => {
       .mockResolvedValueOnce(claudeResponse('[0] 乙')) as any;
     const r = await translateUnits(CLAUDE_CFG, ['A', 'B'], OPTS, { fetchImpl, sleep: noSleep });
     expect(r.translations).toEqual(['甲', '乙']);
+  });
+});
+
+describe('lookupWord', () => {
+  const entry = {
+    word: 'raise', phonetic: '/reɪz/',
+    senses: [{ pos: 'v.', meaning: '举起' }],
+    related: [], contextual: '本句中指举起手',
+  };
+
+  it('正常 JSON 响应解析为 WordEntry，并带 response_format', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(JSON.stringify(entry))) as any;
+    const r = await lookupWord(CFG, 'raise', 'Please raise your hand.', { targetLang: '中文', useJsonFormat: true }, { fetchImpl, sleep: noSleep });
+    expect(r).toEqual(entry);
+    const body = JSON.parse((fetchImpl.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.response_format).toEqual({ type: 'json_object' });
+  });
+
+  it('400 涉及 response_format 时降级重发', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response('{"error":"response_format not supported"}', { status: 400 }))
+      .mockResolvedValueOnce(jsonResponse(JSON.stringify(entry))) as any;
+    const r = await lookupWord(CFG, 'raise', 's', { targetLang: '中文', useJsonFormat: true }, { fetchImpl, sleep: noSleep });
+    expect(r?.word).toBe('raise');
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const body2 = JSON.parse((fetchImpl.mock.calls[1][1] as RequestInit).body as string);
+    expect(body2.response_format).toBeUndefined();
+  });
+
+  it('响应无法解析时返回 null', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse('garbage not json')) as any;
+    const r = await lookupWord(CFG, 'raise', 's', { targetLang: '中文', useJsonFormat: true }, { fetchImpl, sleep: noSleep });
+    expect(r).toBeNull();
+  });
+
+  it('401 抛 AuthError', async () => {
+    const fetchImpl = vi.fn(async () => new Response('unauthorized', { status: 401 })) as any;
+    await expect(lookupWord(CFG, 'raise', 's', { targetLang: '中文', useJsonFormat: true }, { fetchImpl, sleep: noSleep })).rejects.toBeInstanceOf(AuthError);
   });
 });

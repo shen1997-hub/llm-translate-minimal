@@ -1,4 +1,4 @@
-import { buildMessages, parseJsonResponse, parsePlainResponse, type ChatMessage } from './prompt';
+import { buildMessages, buildLookupMessages, parseJsonResponse, parseLookupResponse, parsePlainResponse, type ChatMessage, type WordEntry } from './prompt';
 import { readSse } from './sse';
 import { createMarkerDemux } from './marker-demux';
 import type { ApiProtocol } from '../settings';
@@ -198,4 +198,28 @@ export async function translateUnits(
     }
   }
   return { translations, useJsonFormat: mode };
+}
+
+// 词典查询：一次性请求（词条内容短，不做流式）。解析失败返回 null，由调用方报 failed；
+// response_format 不支持时沿用翻译链路的 plain 降级。
+export async function lookupWord(
+  cfg: LlmConfig,
+  word: string,
+  sentence: string,
+  opts: { targetLang: string; useJsonFormat: boolean },
+  deps: Deps = {},
+): Promise<WordEntry | null> {
+  let mode = opts.useJsonFormat && cfg.protocol !== 'claude'; // Claude 无 response_format
+  let content: string;
+  try {
+    content = await chatCompletion(cfg, buildLookupMessages(word, sentence, opts.targetLang), mode, deps);
+  } catch (e) {
+    if (e instanceof FormatUnsupportedError) {
+      mode = false;
+      content = await chatCompletion(cfg, buildLookupMessages(word, sentence, opts.targetLang), false, deps);
+    } else {
+      throw e;
+    }
+  }
+  return parseLookupResponse(content);
 }
