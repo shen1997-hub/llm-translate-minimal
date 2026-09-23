@@ -1,8 +1,8 @@
-import { handleTranslateRequest } from '../lib/translation/scheduler';
+import { handleTranslateRequest, handleLookupRequest } from '../lib/translation/scheduler';
 import { translateUnits, lookupWord } from '../lib/translation/llm-client';
 import { getCached, setCached } from '../lib/cache/store';
 import { getSettings } from '../lib/settings';
-import type { StartTabRequest, StartTabResponse, TranslateRequest, TranslateResponse } from '../lib/messaging/protocol';
+import type { StartTabRequest, StartTabResponse, TranslateRequest, TranslateResponse, LookupRequest } from '../lib/messaging/protocol';
 
 // WXT 固定把 entrypoints/content.ts 构建到此路径（与 manifest content_scripts.js 一致），
 // 重命名入口文件时需同步这里。
@@ -57,7 +57,28 @@ export default defineBackground(() => {
   browser.runtime.onConnect.addListener((port) => {
     if (port.name !== 'translate') return;
     console.log('[llm-tr] port connected'); // [diag]
-    port.onMessage.addListener(async (msg: TranslateRequest) => {
+    port.onMessage.addListener(async (msg: TranslateRequest | LookupRequest) => {
+      if (msg.kind === 'lookup') {
+        await acquire();
+        try {
+          const response = await handleLookupRequest(
+            msg,
+            { translate: translateUnits, lookup: lookupWord, getCached, setCached, getSettings, jsonFormatSupported },
+          );
+          port.postMessage(response);
+        } catch (e) {
+          // 与 translate 分支同理：任何意外异常也必须回响应，保证每个请求恰好一个响应
+          port.postMessage({
+            kind: 'error',
+            taskId: msg.taskId,
+            code: 'failed',
+            message: e instanceof Error ? e.message : String(e),
+          });
+        } finally {
+          release();
+        }
+        return;
+      }
       if (msg.kind !== 'translate') return;
       console.log('[llm-tr] SW received chunk', msg.chunkId, 'units =', msg.units.length); // [diag]
       await acquire();
