@@ -1,5 +1,7 @@
 import { MOTION_CSS, replayPop, setLoading } from './motion';
 import type { WordEntry } from '../translation/prompt';
+import { createCat, type CatController } from './cat';
+import { dockPoint, selectionAnchor } from './cat-state';
 
 export const SEL_HOST_ATTR = 'data-llm-translate-sel';
 
@@ -16,6 +18,8 @@ export interface SelUI {
   showDot(x: number, y: number): void;
   hideDot(): void;
   isDotVisible(): boolean;
+  /** 猫咪助手开关：true 时划词入口由猫履行，false 回简洁圆钮 */
+  setCatMode(on: boolean): void;
   showPanel(x: number, y: number, model: string): void;
   setPanelState(state: 'loading' | 'done' | 'error', text?: string): void;
   /** 流式增量：切到流式态并追加到面板正文尾部 */
@@ -135,7 +139,12 @@ export function createSelectionUI(doc: Document, cbs: SelUICallbacks): SelUI {
     '<button type="button" class="thumb-down" title="差">👎</button>',
     '</div>',
   ].join('');
-  shadow.append(style, dot, panel);
+  const cat = createCat(doc, {
+    reducedMotion: doc.defaultView?.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false,
+    onClick: () => cbs.onDotClick(),
+  });
+  cat.el.hidden = true;
+  shadow.append(style, dot, cat.el, panel);
   (doc.body ?? doc.documentElement).appendChild(host);
 
   const modelEl = panel.querySelector('.model')!;
@@ -150,6 +159,9 @@ export function createSelectionUI(doc: Document, cbs: SelUICallbacks): SelUI {
   let lastText = '';
   let speakText = ''; // 词典卡片朗读单词本身；为空则朗读 lastText
   let copyTimer: ReturnType<typeof setTimeout> | null = null;
+  let catMode = false;
+  let catOut = false;
+  let catAnchor = { x: 0, y: 0 }; // 视口坐标，供滚出检测
 
   // 溢出才恢复滚动：短译文保持 pointer-events:none，彻底让开下方正文
   function toggleScrollable(): void {
@@ -184,6 +196,30 @@ export function createSelectionUI(doc: Document, cbs: SelUICallbacks): SelUI {
     return { x: p.x + sx, y: p.y + sy };
   }
 
+  function viewportOf(docX: number, docY: number): { x: number; y: number } {
+    const win = doc.defaultView;
+    return { x: docX - (win?.scrollX ?? 0), y: docY - (win?.scrollY ?? 0) };
+  }
+
+  function catReturn(): void {
+    const win = doc.defaultView;
+    cat.returnToDock(win?.innerWidth ?? 1024, win?.innerHeight ?? 768);
+  }
+
+  // 选区滚出视口：猫回停靠，不追着跑
+  function onScroll(): void {
+    if (!catMode || !catOut) return;
+    const win = doc.defaultView;
+    const vw = win?.innerWidth ?? 1024;
+    const vh = win?.innerHeight ?? 768;
+    if (catAnchor.x < 0 || catAnchor.x > vw || catAnchor.y < 0 || catAnchor.y > vh) {
+      catOut = false;
+      cat.send('scroll-out');
+      catReturn();
+    }
+  }
+  doc.addEventListener('scroll', onScroll, { passive: true });
+
   function clampPanel(x: number, y: number): { x: number; y: number } {
     return clampToViewport(x, y, panel.offsetWidth || 340, panel.offsetHeight || 160);
   }
@@ -199,23 +235,58 @@ export function createSelectionUI(doc: Document, cbs: SelUICallbacks): SelUI {
     downBtn.classList.remove('active');
     copyBtn.textContent = '📋';
     if (copyTimer !== null) { clearTimeout(copyTimer); copyTimer = null; }
+    if (catMode) {
+      catReturn();
+      cat.el.hidden = false;
+    }
   }
 
   return {
     host,
     showDot(x, y) {
       hidePanel();
-      // 圆钮贴选区尾，可能落到视口外：夹一下，避免出现在屏幕外
+      if (catMode) {
+        const p = clampToViewport(x, y, 44, 44);
+        const v = viewportOf(p.x, p.y);
+        // content 传入坐标已含 +6 入口偏移；selectionAnchor 再 +8 前先扣回，净偏移 8px（spec §2）
+        catAnchor = selectionAnchor(v.x - 6, v.y - 6);
+        cat.send('select');
+        cat.jumpTo(catAnchor.x, catAnchor.y);
+        catOut = true;
+        cat.el.hidden = false;
+        return;
+      }
       const p = clampToViewport(x, y, 26, 26);
       host.style.left = `${p.x}px`;
       host.style.top = `${p.y}px`;
       dot.hidden = false;
       replayPop(dot);
     },
-    hideDot() { dot.hidden = true; },
-    isDotVisible: () => !dot.hidden,
+    hideDot() {
+      dot.hidden = true;
+      if (catMode && catOut) {
+        catOut = false;
+        cat.send('clear');
+        catReturn();
+      }
+    },
+    isDotVisible: () => (catMode ? catOut : !dot.hidden),
+    setCatMode(on) {
+      catMode = on;
+      cat.el.hidden = !on;
+      if (on) {
+        const win = doc.defaultView;
+        cat.dockNow(win?.innerWidth ?? 1024, win?.innerHeight ?? 768);
+      } else {
+        catOut = false;
+      }
+    },
     showPanel(x, y, model) {
       dot.hidden = true;
+      if (catMode && catOut) {
+        catOut = false;
+        cat.send('panel-closed');
+      }
       streaming = false;
       modelEl.textContent = model;
       panel.hidden = false;
@@ -223,6 +294,11 @@ export function createSelectionUI(doc: Document, cbs: SelUICallbacks): SelUI {
       host.style.left = `${p.x}px`;
       host.style.top = `${p.y}px`;
       replayPop(panel);
+      if (catMode) {
+        const v = viewportOf(p.x, p.y);
+        cat.perchAt(Math.max(8, v.x + (panel.offsetWidth || 340) - 40), Math.max(8, v.y - 30));
+        cat.el.hidden = false;
+      }
     },
     setPanelState(state, text) {
       streaming = false;
@@ -326,6 +402,11 @@ export function createSelectionUI(doc: Document, cbs: SelUICallbacks): SelUI {
     pathInside: (path) => path.includes(host),
     containsNode: (n) =>
       n !== null && (n === host || host.contains(n) || (host.shadowRoot?.contains(n) ?? false)),
-    destroy() { if (copyTimer !== null) clearTimeout(copyTimer); host.remove(); },
+    destroy() {
+      if (copyTimer !== null) clearTimeout(copyTimer);
+      doc.removeEventListener('scroll', onScroll);
+      cat.destroy();
+      host.remove();
+    },
   };
 }

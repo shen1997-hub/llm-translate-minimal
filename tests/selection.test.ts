@@ -171,4 +171,44 @@ describe('createSelectionUI', () => {
     expect(ui.pathInside([ui.host])).toBe(true);
     expect(ui.pathInside([document.body])).toBe(false);
   });
+
+  it('catMode：showDot 由猫履行，圆钮保持隐藏', () => {
+    const { ui, cbs } = makeUI();
+    void cbs;
+    ui.setCatMode(true);
+    ui.showDot(120, 80);
+    const cat = ui.host.shadowRoot!.querySelector<HTMLElement>('.cat')!;
+    const dot = ui.host.shadowRoot!.querySelector<HTMLElement>('.dot')!;
+    expect(cat.hidden).toBe(false);
+    expect(dot.hidden).toBe(true);
+    expect(ui.isDotVisible()).toBe(true);
+    expect(cat.dataset.state).not.toBe('dock');
+  });
+
+  it('catMode：hideDot 让猫回停靠且 isDotVisible 为 false', () => {
+    const { ui } = makeUI();
+    ui.setCatMode(true);
+    ui.showDot(120, 80);
+    ui.hideDot();
+    expect(ui.isDotVisible()).toBe(false);
+  });
+
+  it('catMode：点击猫触发 onDotClick', () => {
+    const { ui, cbs } = makeUI();
+    ui.setCatMode(true);
+    ui.showDot(120, 80);
+    const cat = ui.host.shadowRoot!.querySelector<HTMLElement>('.cat')!;
+    cat.click();
+    expect(cbs.onDotClick).toHaveBeenCalled();
+  });
+
+  it('catMode=false：回圆钮路径', () => {
+    const { ui } = makeUI();
+    ui.setCatMode(false);
+    ui.showDot(120, 80);
+    const dot = ui.host.shadowRoot!.querySelector<HTMLElement>('.dot')!;
+    const cat = ui.host.shadowRoot!.querySelector<HTMLElement>('.cat')!;
+    expect(dot.hidden).toBe(false);
+    expect(cat.hidden).toBe(true);
+  });
 });
