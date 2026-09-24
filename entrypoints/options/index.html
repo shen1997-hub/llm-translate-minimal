@@ -3,54 +3,100 @@
 <head><meta charset="utf-8"><title>极简翻译 设置</title>
 <style>
   :root {
-    --primary: #e91e63; --primary-hover: #d81b60; --bg: #f2f4f8; --card: #ffffff;
-    --text: #333333; --text-secondary: #999999; --border: #eeeeee; --danger: #e06c75;
+    --brand: #e91e63;
+    --brand-deep: #c2185b;
+    --brand-tint: #fdeef4;
+    --ink: #1f2328;
+    --ink-2: #6a737d;
+    --paper: #f7f8fa;
+    --card: #ffffff;
+    --line: #e4e7eb;
+    --ok: #1a7f37;
+    --danger: #c62828;
+    --r-ctl: 8px;
+    --r-box: 10px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); font-size: 14px; }
-  .container { max-width: 640px; margin: 0 auto; padding: 24px 16px 48px; }
-  .header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
-  .header .logo { width: 32px; height: 32px; border-radius: 9px; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700; }
-  .header h1 { font-size: 18px; font-weight: 600; }
-  .card { background: var(--card); border-radius: 12px; padding: 6px 18px 14px; margin-bottom: 14px; }
-  .card h2 { font-size: 13px; color: var(--text-secondary); font-weight: 500; padding: 12px 0 4px; }
-  label { display: block; margin-top: 10px; font-size: 13.5px; font-weight: 500; }
-  input, textarea, select { width: 100%; box-sizing: border-box; margin-top: 5px; padding: 9px 11px; border: 1px solid #dde1e7; border-radius: 8px; font-size: 13.5px; font-family: inherit; background: #fafbfc; color: var(--text); }
-  input:focus, textarea:focus, select:focus { outline: 2px solid #f8bbd0; border-color: var(--primary); }
-  textarea { min-height: 76px; resize: vertical; }
+  body {
+    font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--paper); color: var(--ink); font-size: 14px;
+  }
+  :focus-visible { outline: 2px solid var(--brand-tint); outline-offset: 1px; }
+  .container { max-width: 640px; margin: 0 auto; padding: 28px 16px 48px; }
+  .header { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+  .header .logo {
+    width: 32px; height: 32px; border-radius: var(--r-ctl); background: var(--brand);
+    color: #fff; display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 700;
+  }
+  .header h1 { font-size: 19px; font-weight: 600; letter-spacing: 0.2px; }
+
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--r-box);
+    padding: 4px 18px 16px; margin-bottom: 14px;
+  }
+  .card h2 {
+    font-size: 12px; font-weight: 600; color: var(--ink-2);
+    padding: 14px 0 6px; border-bottom: 1px solid var(--line); margin-bottom: 4px;
+  }
+  label { display: block; margin-top: 12px; font-size: 13.5px; font-weight: 500; }
+  input, textarea, select {
+    width: 100%; box-sizing: border-box; margin-top: 6px; padding: 0 11px; height: 34px;
+    border: 1px solid var(--line); border-radius: var(--r-ctl); font-size: 13.5px;
+    font-family: inherit; background: var(--card); color: var(--ink);
+  }
+  textarea { height: auto; min-height: 76px; padding: 8px 11px; resize: vertical; line-height: 1.6; }
+  input:focus, textarea:focus, select:focus { outline: 2px solid var(--brand-tint); border-color: var(--brand); }
   .row { display: flex; gap: 12px; } .row > div { flex: 1; }
 
   /* 供应商列表 */
-  .pv-row { display: flex; align-items: center; gap: 10px; padding: 12px 0; border-top: 1px solid var(--border); }
+  .pv-row { display: flex; align-items: center; gap: 10px; padding: 12px 0; border-top: 1px solid var(--line); }
   .pv-row:first-of-type { border-top: none; }
   .pv-info { flex: 1; min-width: 0; }
   .pv-name { font-weight: 600; font-size: 14px; }
-  .pv-sub { font-size: 12.5px; color: var(--text-secondary); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .pv-badge { font-size: 11px; color: var(--primary); border: 1px solid var(--primary); border-radius: 6px; padding: 1px 6px; flex: none; }
+  .pv-sub { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pv-badge {
+    font-size: 11px; font-weight: 500; color: var(--brand-deep); background: var(--brand-tint);
+    border-radius: 6px; padding: 2px 7px; flex: none;
+  }
   .pv-actions { display: flex; gap: 6px; flex: none; }
-  .btn-text { border: none; background: none; color: var(--primary); font-size: 13px; cursor: pointer; padding: 4px 6px; border-radius: 6px; }
-  .btn-text:hover { background: #fdeef4; }
+  .btn-text {
+    border: none; background: none; color: var(--brand-deep); font-size: 13px; cursor: pointer;
+    padding: 4px 8px; border-radius: 6px; font-family: inherit;
+  }
+  .btn-text:hover { background: var(--brand-tint); }
   .btn-text.danger { color: var(--danger); }
-  .btn-text.danger:hover { background: #fdeeef; }
-  .pv-form { border-top: 1px dashed var(--border); padding: 4px 0 12px; }
+  .btn-text.danger:hover { background: #fdecec; }
+  .pv-form { border-top: 1px dashed var(--line); padding: 4px 0 12px; }
   .pv-form .form-actions { display: flex; gap: 10px; margin-top: 12px; }
   .form-error { color: var(--danger); font-size: 12.5px; margin-top: 8px; }
-  #add-provider { width: 100%; margin-top: 12px; padding: 9px; border: 1px dashed #ccd1d9; border-radius: 8px; background: none; color: var(--text-secondary); font-size: 13.5px; cursor: pointer; }
-  #add-provider:hover { border-color: var(--primary); color: var(--primary); }
-  #import-ccswitch { width: 100%; margin-top: 8px; padding: 9px; border: 1px dashed #ccd1d9; border-radius: 8px; background: none; color: var(--text-secondary); font-size: 13.5px; cursor: pointer; }
-  #import-ccswitch:hover { border-color: var(--primary); color: var(--primary); }
-  .hint { font-size: 12px; color: var(--text-secondary); margin-top: 6px; line-height: 1.5; }
-  .import-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--border); font-weight: 400; }
-  .import-row input[type="checkbox"] { width: auto; margin: 0; flex: none; }
+  #add-provider, #import-ccswitch {
+    width: 100%; margin-top: 10px; height: 34px; border: 1px dashed #ccd1d9;
+    border-radius: var(--r-ctl); background: none; color: var(--ink-2);
+    font-size: 13.5px; font-family: inherit; cursor: pointer;
+    transition: color 0.12s, border-color 0.12s;
+  }
+  #add-provider:hover, #import-ccswitch:hover { border-color: var(--brand); color: var(--brand-deep); }
+  .hint { font-size: 12px; color: var(--ink-2); margin-top: 8px; line-height: 1.5; }
+  .import-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); font-weight: 400; }
+  .import-row input[type="checkbox"] { width: auto; height: auto; margin: 0; flex: none; }
   #import-list .btn-primary { margin-top: 10px; }
   #import-list .form-error { padding: 8px 0; }
-  .empty-hint { padding: 14px 0; color: var(--text-secondary); font-size: 13px; text-align: center; }
+  .empty-hint { padding: 14px 0; color: var(--ink-2); font-size: 13px; text-align: center; }
 
-  .btn-primary { padding: 9px 22px; border: none; border-radius: 10px; cursor: pointer; background: var(--primary); color: #fff; font-size: 14px; font-weight: 600; }
-  .btn-primary:hover { background: var(--primary-hover); }
-  .btn-secondary { padding: 8px 16px; border: 1px solid #ccd1d9; border-radius: 10px; cursor: pointer; background: #fff; color: var(--text); font-size: 13.5px; }
+  .btn-primary {
+    height: 36px; padding: 0 22px; border: none; border-radius: var(--r-ctl); cursor: pointer;
+    background: var(--brand); color: #fff; font-size: 14px; font-weight: 600; font-family: inherit;
+    transition: background 0.12s;
+  }
+  .btn-primary:hover { background: var(--brand-deep); }
+  .btn-secondary {
+    height: 34px; padding: 0 16px; border: 1px solid var(--line); border-radius: var(--r-ctl);
+    cursor: pointer; background: var(--card); color: var(--ink); font-size: 13.5px; font-family: inherit;
+  }
+  .btn-secondary:hover { border-color: #ccd1d9; background: var(--paper); }
   .actions { display: flex; align-items: center; gap: 10px; margin-top: 18px; }
-  #status { margin-left: auto; font-size: 13px; color: #2a7; }
+  #status { margin-left: auto; font-size: 13px; color: var(--ok); }
 </style></head>
 <body>
   <div class="container">

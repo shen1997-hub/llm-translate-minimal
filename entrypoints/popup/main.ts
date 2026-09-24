@@ -39,6 +39,7 @@ async function refresh(): Promise<void> {
   // 语言下拉
   fillLangSelect($('source-lang') as HTMLSelectElement, ['自动检测', ...LANGUAGES], s.sourceLang);
   fillLangSelect($('target-lang') as HTMLSelectElement, LANGUAGES, s.targetLang);
+  syncHero();
 
   // 供应商/模型两级下拉
   const providerSelect = $('provider-select') as HTMLSelectElement;
@@ -76,6 +77,12 @@ async function refresh(): Promise<void> {
     const tokens = Math.ceil(probe.chars / 3.5);
     $('estimate').textContent = `将翻译 ${probe.paragraphs} 段 / 约 ${tokens} tokens`;
   }
+}
+
+function syncHero(): void {
+  const src = ($('source-lang') as HTMLSelectElement).value || 'auto';
+  const dst = ($('target-lang') as HTMLSelectElement).value;
+  $('hero-pair').textContent = `${src === 'auto' ? '自动检测' : src} → ${dst}`;
 }
 
 function fillLangSelect(select: HTMLSelectElement, options: string[], current: string): void {
@@ -131,9 +138,11 @@ $('action').addEventListener('click', async () => {
 
 $('source-lang').addEventListener('change', async (e) => {
   await saveSettings({ sourceLang: (e.target as HTMLSelectElement).value });
+  syncHero();
 });
 $('target-lang').addEventListener('change', async (e) => {
   await saveSettings({ targetLang: (e.target as HTMLSelectElement).value });
+  syncHero();
 });
 $('provider-select').addEventListener('change', async (e) => {
   const id = (e.target as HTMLSelectElement).value;

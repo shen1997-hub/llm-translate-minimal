@@ -59,49 +59,50 @@ const SHADOW_CSS = `
   width: 26px; height: 26px; border-radius: 50%; border: none; cursor: pointer; padding: 0;
   background: #e91e63; color: #fff; font-size: 13px; font-weight: 700;
   display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 2px 10px rgba(233, 30, 99, 0.35);
 }
 .panel {
-  width: 340px; border-radius: 12px; background: #fff; color: #333;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+  width: 340px; border-radius: 10px; background: #fff; color: #1f2328;
+  box-shadow: 0 8px 24px rgba(31, 35, 40, 0.16);
   font: 13.5px/1.6 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
   overflow: hidden; pointer-events: none;
 }
 .panel button { pointer-events: auto; }
-.header { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid #f0f0f0; }
+.header { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid #e4e7eb; }
 .logo { width: 20px; height: 20px; border-radius: 6px; background: #e91e63; color: #fff;
   display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; }
-.model { flex: 1; font-size: 12px; color: #999; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.header button { border: none; background: none; cursor: pointer; font-size: 13px; color: #999; padding: 2px 4px; }
-.header button.active { color: #e91e63; }
+.model { flex: 1; font-size: 12px; color: #6a737d; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.header button { border: none; background: none; cursor: pointer; font-size: 13px; color: #6a737d; padding: 2px 4px; }
+.header button.active { color: #c2185b; }
 .body { padding: 10px 12px; min-height: 24px; max-height: 240px; overflow-y: auto; white-space: pre-wrap; }
-.body.loading { color: #999; }
-.body.error { color: #e06c75; }
+.body.loading { color: #6a737d; }
+.body.error { color: #c62828; }
 /* 长译文溢出时才恢复滚动：短译文完全让开鼠标 */
 .body.scrollable { pointer-events: auto; }
-.body button[data-sel-retry] { margin-left: 8px; cursor: pointer; border: 1px solid #e06c75;
-  background: transparent; color: #e06c75; border-radius: 6px; padding: 1px 8px; font-size: 12px; }
+.body button[data-sel-retry] { margin-left: 8px; cursor: pointer; border: 1px solid #c62828;
+  background: transparent; color: #c62828; border-radius: 6px; padding: 1px 8px; font-size: 12px; }
 .word-head { display: flex; align-items: baseline; gap: 8px; padding-bottom: 4px; }
-.word-head .w { font-size: 18px; font-weight: 700; }
-.word-head .phonetic { color: #999; font-size: 12.5px; }
+.word-head .w { font-size: 17px; font-weight: 700; }
+.word-head .phonetic { color: #6a737d; font-size: 12.5px; }
 .word-section { padding: 4px 0; }
-.word-section + .word-section { border-top: 1px solid #f0f0f0; }
-.sec-title { font-size: 11.5px; color: #999; margin-bottom: 2px; }
+.word-section + .word-section { border-top: 1px solid #e4e7eb; }
+.sec-title { font-size: 11.5px; color: #6a737d; margin-bottom: 2px; }
 .sense { display: flex; gap: 6px; }
-.sense .pos { color: #e91e63; font-style: italic; min-width: 32px; }
+.sense .pos { color: #c2185b; font-style: italic; min-width: 32px; }
 .related-chips { display: flex; flex-wrap: wrap; gap: 4px; }
-.chip { background: #f4f4f6; border-radius: 10px; padding: 1px 8px; font-size: 12px; }
-.contextual { background: #faf6f8; border-radius: 8px; padding: 6px 8px; }
-.footer { display: flex; gap: 4px; padding: 6px 10px; border-top: 1px solid #f0f0f0; }
+.chip { background: #fdeef4; color: #c2185b; border-radius: 8px; padding: 1px 8px; font-size: 12px; }
+.contextual { background: #fdf3f7; border-radius: 8px; padding: 6px 8px; }
+.footer { display: flex; gap: 4px; padding: 6px 10px; border-top: 1px solid #e4e7eb; }
 .footer button { border: none; background: none; cursor: pointer; font-size: 14px; padding: 2px 6px; opacity: 0.7; }
 .footer button.active { opacity: 1; }
 ${MOTION_CSS}
 @media (prefers-color-scheme: dark) {
-  .panel { background: #23272f; color: #ddd; }
-  .header, .footer { border-color: #383c44; }
-  .word-section + .word-section { border-color: #383c44; }
-  .chip { background: #33373f; }
-  .contextual { background: #2b2f38; }
+  .panel { background: #1f2328; color: #e6e1e4; }
+  .header, .footer { border-color: #343a40; }
+  .word-section + .word-section { border-color: #343a40; }
+  .model, .header button, .body.loading, .sec-title, .word-head .phonetic { color: #9aa2ab; }
+  .chip { background: #33262c; color: #f0a8c0; }
+  .contextual { background: #2a2026; }
 }`;
 
 export function createSelectionUI(doc: Document, cbs: SelUICallbacks): SelUI {

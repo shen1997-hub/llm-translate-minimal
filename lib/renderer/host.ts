@@ -4,15 +4,18 @@ export const HOST_ATTR = 'data-llm-translate-host';
 
 const SHADOW_CSS = `
 :host { display: block; }
-.body { margin: 4px 0 12px; padding: 6px 10px; border-left: 3px solid #7aa2f7;
-  color: #333; background: #f6f8fc; font-size: 0.95em; line-height: 1.6; }
-.body.loading { color: #999; }
-.body.error { border-left-color: #e06c75; color: #e06c75; }
-button[data-retry] { margin-left: 8px; cursor: pointer; }
+.body { margin: 4px 0 12px; padding: 6px 10px; border-left: 2px solid #e91e63;
+  border-radius: 0 6px 6px 0; color: #1f2328; background: #fdf3f7;
+  font-size: 0.95em; line-height: 1.6; }
+.body.loading { color: #6a737d; }
+.body.error { border-left-color: #c62828; background: #fdecec; color: #c62828; }
+button[data-retry] { margin-left: 8px; cursor: pointer; border: 1px solid currentColor;
+  background: transparent; border-radius: 6px; padding: 1px 8px; font-size: 12px; }
 ${MOTION_CSS}
 @media (prefers-color-scheme: dark) {
-  .body { color: #ddd; background: #1e2430; border-left-color: #4a6da7; }
-  .body.loading { color: #777; }
+  .body { color: #e8e2e5; background: #2a2026; border-left-color: #c2185b; }
+  .body.loading { color: #8b8388; }
+  .body.error { background: #332225; border-left-color: #e07a7a; color: #e07a7a; }
 }`;
 
 export function ensureHost(after: Element, hostId: string): HTMLElement {
