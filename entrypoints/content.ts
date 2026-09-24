@@ -90,7 +90,13 @@ async function collectParagraphs(): Promise<Paragraph[]> {
   const s = await getSettings();
   const root = findContentRoot(document, SITE_RULE);
   const ps = extractParagraphs(root, { minLength: s.minLength, cjkRatioThreshold: s.cjkRatioThreshold }, browserIsVisible, SITE_RULE);
-  const fresh = ps.filter(p => !p.element.hasAttribute(STATE_ATTR));
+  // 文本级去重兜底：提取层若漏掉重复（同文本不同元素），同批只翻译首次出现的一段
+  const seen = new Set<string>();
+  const fresh = ps.filter(p => {
+    if (p.element.hasAttribute(STATE_ATTR) || seen.has(p.text)) return false;
+    seen.add(p.text);
+    return true;
+  });
   fresh.forEach(p => { p.id = stableId(p.element); });
   return fresh;
 }

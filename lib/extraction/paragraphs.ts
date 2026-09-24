@@ -59,7 +59,9 @@ export function extractParagraphs(
   const result: Paragraph[] = [];
   let seq = 0;
   for (const el of root.querySelectorAll(`${candidateSelector}, div`)) {
-    if (isExcludedContainer(el) || el.closest(excludedAncestors)) continue;
+    // 站点规则显式包含的区域（如 GitHub 侧栏 About）跳过通用排除
+    const included = rule?.extraIncludes ? el.closest(rule.extraIncludes) !== null : false;
+    if (!included && (isExcludedContainer(el) || el.closest(excludedAncestors))) continue;
     if (isNestedDuplicate(el, candidateSelector)) continue;
     if (el.closest('pre, code')) continue;
     if (!isVisible(el)) continue;
@@ -72,12 +74,28 @@ export function extractParagraphs(
     if (!/[a-zA-Z]/.test(text)) continue;
     result.push({ id: `p${seq++}`, element: el, text });
   }
-  return result;
+  // isNestedDuplicate 只统计候选后代，候选祖先（如 td/li）与其内层的文本块 div
+  // 可能同时入选。此处收尾去重：存在包含关系时只保留内层，避免同一文本渲染两份译文。
+  return result.filter(p => !result.some(q => q !== p && p.element.contains(q.element)));
 }
+
+// sr-only 惯用裁剪：clip: rect(0, 0, 0, 0)
+const CLIP_ZERO_RE = /^rect\(\s*0(?:px)?[\s,]+0(?:px)?[\s,]+0(?:px)?[\s,]+0(?:px)?\s*\)$/;
 
 export function browserIsVisible(el: Element): boolean {
   const style = getComputedStyle(el);
-  if (style.display === 'none' || style.visibility === 'hidden') return false;
+  if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse') return false;
   if (style.position === 'fixed') return true;
+  if (style.opacity === '0') return false;
+  if (style.fontSize === '0px') return false;
+  // clip / clip-path 裁剪隐藏（屏幕阅读器专用文本的惯用手法）
+  if (CLIP_ZERO_RE.test(style.clip)) return false;
+  if (style.clipPath.startsWith('inset(')) return false;
+  // 收缩到 1px 以下的绝对定位溢出隐藏（如 GitHub 的 .sr-only / .visually-hidden）
+  if (style.position === 'absolute' && style.overflow === 'hidden') {
+    const w = parseFloat(style.width);
+    const h = parseFloat(style.height);
+    if ((w > 0 && w <= 1) || (h > 0 && h <= 1)) return false;
+  }
   return (el as HTMLElement).offsetParent !== null;
 }

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { extractParagraphs, cjkRatio } from '../lib/extraction/paragraphs';
+import { siteRuleFor } from '../lib/extraction/site-rules';
 
 const OPTS = { minLength: 20, cjkRatioThreshold: 0.3 };
 const visible = () => true;
@@ -122,6 +123,30 @@ describe('extractParagraphs', () => {
     const r = root(`<div><ul><li>${LONG_BLOCK}</li></ul></div>`);
     const ps = extractParagraphs(r, OPTS, visible);
     expect(ps.every(p => p.element.tagName !== 'DIV')).toBe(true);
+  });
+
+  it('GitHub 规则：翻译 About，不翻译文件树 commit 列与最新提交栏', () => {
+    const rule = siteRuleFor('github.com');
+    const r = root(`
+      <div class="Layout">
+        <div class="Layout-main">
+          <div class="react-directory-row-commit-cell"><a href="/x/commit/abc">${LONG}</a></div>
+          <div data-testid="latest-commit"><a href="/x">author</a><span>${LONG}</span></div>
+          <p>${LONG}</p>
+        </div>
+        <aside class="Layout-sidebar"><p>${LONG_BLOCK}</p></aside>
+      </div>`);
+    const ps = extractParagraphs(r, OPTS, visible, rule);
+    expect(ps).toHaveLength(2);
+    expect(ps.some(p => p.element.closest('.react-directory-row-commit-cell'))).toBe(false);
+    expect(ps.some(p => p.element.closest('[data-testid="latest-commit"]'))).toBe(false);
+    expect(ps.some(p => p.element.closest('.Layout-sidebar'))).toBe(true);
+  });
+
+  it('GitHub 规则：无规则时 aside 内的 About 会被通用排除拦下', () => {
+    const r = root(`<aside class="Layout-sidebar"><p>${LONG_BLOCK}</p></aside><p>${LONG}</p>`);
+    const ps = extractParagraphs(r, OPTS, visible);
+    expect(ps).toHaveLength(1);
   });
 });
 

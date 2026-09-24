@@ -29,13 +29,31 @@ describe('ensureHost', () => {
     expect(host.style.gridColumn).toBe('1 / -1');
   });
 
-  it('flex 父容器：host 独占整行 (flexShrink: 0)', () => {
-    const d = doc('<div style="display:flex"><p>text</p></div>');
+  it('flex 父容器（可换行）：host 独占整行 (flexShrink: 0)', () => {
+    const d = doc('<div style="display:flex;flex-wrap:wrap"><p>text</p></div>');
     const p = d.querySelector('p')!;
     const host = ensureHost(p, 'f1');
     expect(host.style.flexBasis).toBe('100%');
     expect(host.style.width).toBe('100%');
     expect(host.style.flexShrink).toBe('0');
+  });
+
+  it('单行横排 flex 父容器：host 挂到容器之后，避免挤垮同行原文', () => {
+    const d = doc('<section><div style="display:flex"><span>author</span><p>text</p></div></section>');
+    const p = d.querySelector('p')!;
+    const bar = d.querySelector('section > div')!;
+    const host = ensureHost(p, 'f2');
+    expect(host.parentElement).toBe(d.querySelector('section'));
+    expect(bar.nextSibling).toBe(host);
+    expect(host.style.flexBasis).toBe('');
+  });
+
+  it('纵排 flex 父容器：仍插在容器内并独占整行', () => {
+    const d = doc('<div style="display:flex;flex-direction:column"><p>text</p></div>');
+    const p = d.querySelector('p')!;
+    const host = ensureHost(p, 'f3');
+    expect(host.parentElement).toBe(p.parentElement);
+    expect(host.style.flexBasis).toBe('100%');
   });
 
   it('重复调用同 id 返回已有 host，不重复插入', () => {

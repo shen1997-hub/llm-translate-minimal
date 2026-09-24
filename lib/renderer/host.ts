@@ -35,7 +35,14 @@ export function ensureHost(after: Element, hostId: string): HTMLElement {
   } else {
     const parent = after.parentElement;
     if (parent) {
-      const display = getComputedStyle(parent).display;
+      const style = getComputedStyle(parent);
+      const display = style.display;
+      // 单行横排 flex（工具栏、提交信息栏等）：块级宿主独占整行的样式会挤垮同行原文，
+      // 改挂到 flex 容器之后，避免遮罩原文
+      if (display.includes('flex') && !style.flexDirection.startsWith('column') && style.flexWrap === 'nowrap' && parent.parentElement) {
+        parent.parentElement.insertBefore(host, parent.nextSibling);
+        return host;
+      }
       if (display.includes('grid')) {
         host.style.gridColumn = '1 / -1';
       }

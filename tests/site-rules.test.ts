@@ -17,4 +17,13 @@ describe('siteRuleFor', () => {
     expect(siteRuleFor('example.com')).toBeUndefined();
     expect(siteRuleFor('x.com.evil-phish.com')).toBeUndefined();
   });
+
+  it('github.com 及其子域命中规则：排除 commit 列、保留 About 侧栏', () => {
+    const rule = siteRuleFor('github.com');
+    expect(rule?.rootSelector).toContain('main');
+    expect(rule?.extraExcludes).toContain('.sr-only');
+    expect(rule?.extraExcludes).toContain('react-directory-row-commit-cell');
+    expect(rule?.extraIncludes).toContain('Layout-sidebar');
+    expect(siteRuleFor('gist.github.com')?.extraExcludes).toContain('.visually-hidden');
+  });
 });
