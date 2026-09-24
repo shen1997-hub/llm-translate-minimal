@@ -18,6 +18,7 @@ export const BASE_SETTINGS = {
   disabledSites: [] as string[],
   minLength: 20,
   cjkRatioThreshold: 0.3,
+  catMode: false,
 };
 
 export async function seedSettings(context: BrowserContext, extensionId: string, overrides: Record<string, unknown> = {}): Promise<void> {
