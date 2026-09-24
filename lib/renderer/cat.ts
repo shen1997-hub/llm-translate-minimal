@@ -8,6 +8,7 @@ const HAPPY_MS = 600;
 const IDLE_MS = 20_000;
 const JUMP_MS = 420;
 const RETURN_MS = 360;
+const REDUCED_MOVE_MS = 120;
 
 const CAT_SVG = `
 <svg viewBox="0 0 44 44" width="44" height="44" aria-hidden="true">
@@ -103,11 +104,14 @@ export function createCat(doc: Document, opts: { reducedMotion: boolean; onClick
   let alertTimer: ReturnType<typeof setTimeout> | null = null;
   let happyTimer: ReturnType<typeof setTimeout> | null = null;
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
+  let moveTimer: ReturnType<typeof setTimeout> | null = null;
+  let anim: Animation | null = null;
   let destroyed = false;
 
   function clearTimers(): void {
     if (alertTimer !== null) { clearTimeout(alertTimer); alertTimer = null; }
     if (happyTimer !== null) { clearTimeout(happyTimer); happyTimer = null; }
+    if (moveTimer !== null) { clearTimeout(moveTimer); moveTimer = null; }
   }
 
   function armIdle(): void {
@@ -129,21 +133,43 @@ export function createCat(doc: Document, opts: { reducedMotion: boolean; onClick
     el.style.transform = `translate(${p.x}px, ${p.y}px)`;
   }
 
-  function canAnimate(): boolean {
-    return !opts.reducedMotion && typeof el.animate === 'function';
+  function cancelAnim(): void {
+    if (anim !== null) { anim.cancel(); anim = null; }
   }
 
   function move(p: { x: number; y: number }, ms: number, frames: { transform: string; offset?: number }[], done: CatEvent): void {
-    if (!canAnimate()) {
+    if (moveTimer !== null) { clearTimeout(moveTimer); moveTimer = null; }
+    cancelAnim();
+    if (typeof el.animate !== 'function') {
+      // jsdom 等无 WAAPI 环境：瞬时落点 + 同步派发 done
       setPoint(p);
       apply(nextCatState(state, done));
       return;
     }
-    el.animate(frames, { duration: ms, easing: 'cubic-bezier(0.3, 0.7, 0.4, 1)' });
+    if (opts.reducedMotion) {
+      // 降级动画：120ms 位移 + 淡入，无抛物线无 squash
+      const from = el.style.transform || 'translate(0px, 0px)';
+      anim = el.animate(
+        [
+          { transform: from, opacity: 0.4 },
+          { transform: `translate(${p.x}px, ${p.y}px)`, opacity: 1 },
+        ],
+        { duration: REDUCED_MOVE_MS, easing: 'ease' },
+      );
+      setPoint(p);
+      moveTimer = setTimeout(() => {
+        moveTimer = null;
+        if (!destroyed) apply(nextCatState(state, done));
+      }, REDUCED_MOVE_MS);
+      return;
+    }
+    anim = el.animate(frames, { duration: ms, easing: 'cubic-bezier(0.3, 0.7, 0.4, 1)' });
     setPoint(p);
-    const t = setTimeout(() => { if (!destroyed) apply(nextCatState(state, done)); }, ms);
-    // 动画期间状态已切到 jump/return，done 事件由定时器在结束时派发
-    void t;
+    // 动画期间状态已切到 jump/return，done 事件由受管定时器在结束时派发
+    moveTimer = setTimeout(() => {
+      moveTimer = null;
+      if (!destroyed) apply(nextCatState(state, done));
+    }, ms);
   }
 
   el.addEventListener('mousedown', (e) => e.preventDefault());
@@ -189,6 +215,7 @@ export function createCat(doc: Document, opts: { reducedMotion: boolean; onClick
     destroy() {
       destroyed = true;
       clearTimers();
+      cancelAnim();
       if (idleTimer !== null) clearTimeout(idleTimer);
       el.remove();
     },
