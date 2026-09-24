@@ -4,6 +4,8 @@ import { siteRuleFor } from '../lib/extraction/site-rules';
 import { isWordLike, extractSentence } from '../lib/extraction/word';
 import type { Paragraph } from '../lib/extraction/paragraphs';
 import { buildChunks } from '../lib/translation/chunking';
+import { LazyPool } from '../lib/translation/lazy-pool';
+import { buildAliases, mergeAliases } from '../lib/translation/alias';
 import type { TranslateRequest, TranslateResponse, LookupRequest, LookupResponse } from '../lib/messaging/protocol';
 import { ensureHost, setHostState, removeAllHosts, HOST_ATTR } from '../lib/renderer/host';
 import { createSelectionUI, SEL_HOST_ATTR } from '../lib/renderer/selection';
@@ -15,6 +17,8 @@ const STATE_ATTR = 'data-llm-translate-state';
 const PID_ATTR = 'data-llm-translate-pid';
 const CHUNK_TIMEOUT_MS = 60_000;
 const MAX_RESENDS = 2;
+const POOL_TICK_MS = 300;
+const VIEWPORT_MARGIN = 200;
 
 // 扩展重载/更新后，页面上残留的旧内容脚本会失去扩展上下文，此后任何 chrome.* 调用都
 // 抛 "Extension context invalidated"。在被自愈补注入的新实例接管之前，这个页面上的旧
@@ -40,6 +44,7 @@ interface Task {
   paragraphs: Map<string, Paragraph>;
   errors: Set<string>;
   observer: MutationObserver | null;
+  aliases: Map<string, string[]>;
 }
 
 let task: Task | null = null;
@@ -51,6 +56,9 @@ let lookupReq: LookupRequest | null = null; // 最后一次词典查询请求，
 let selText = ''; // 当前面板对应的选中文本（判断选区是否变化）
 let selTimer: ReturnType<typeof setTimeout> | null = null;
 let speaking = false;
+let pool = new LazyPool();
+let ticker: ReturnType<typeof setInterval> | null = null;
+let chunkSeq = 0;
 
 export default defineContentScript({
   matches: ['<all_urls>'],
@@ -90,13 +98,7 @@ async function collectParagraphs(): Promise<Paragraph[]> {
   const s = await getSettings();
   const root = findContentRoot(document, SITE_RULE);
   const ps = extractParagraphs(root, { minLength: s.minLength, cjkRatioThreshold: s.cjkRatioThreshold }, browserIsVisible, SITE_RULE);
-  // 文本级去重兜底：提取层若漏掉重复（同文本不同元素），同批只翻译首次出现的一段
-  const seen = new Set<string>();
-  const fresh = ps.filter(p => {
-    if (p.element.hasAttribute(STATE_ATTR) || seen.has(p.text)) return false;
-    seen.add(p.text);
-    return true;
-  });
+  const fresh = ps.filter(p => !p.element.hasAttribute(STATE_ATTR));
   fresh.forEach(p => { p.id = stableId(p.element); });
   return fresh;
 }
@@ -160,6 +162,71 @@ function sendChunk(entry: PendingEntry): void {
   postToPort(entry.chunk);
 }
 
+function aliasIds(t: Task, p: Paragraph): string[] {
+  return t.aliases.get(p.text) ?? [p.id];
+}
+
+// 池泵：取出视口内段落（含别名扩展），打标、建宿主、按规范文本去重后发块
+function pump(): void {
+  if (!task || task.cancelled) return;
+  try {
+    pool.prune();
+    const taken = pool.takeVisible(
+      (el) => { const r = el.getBoundingClientRect(); return { top: r.top, bottom: r.bottom }; },
+      window.innerHeight,
+      VIEWPORT_MARGIN,
+    );
+    if (taken.length === 0) {
+      if (pool.size === 0) stopTicker();
+      return;
+    }
+    // 别名扩展：同文本段落一并取出，只发一份文本
+    const batch = new Map<string, Paragraph>();
+    for (const p of taken) {
+      batch.set(p.id, p);
+      const rest = aliasIds(task, p).filter(id => !batch.has(id));
+      for (const q of pool.removeMany(rest)) batch.set(q.id, q);
+    }
+    for (const p of batch.values()) {
+      task.paragraphs.set(p.id, p);
+      p.element.setAttribute(STATE_ATTR, 'pending');
+      ensureHost(p.element, hostId(task.id, p.id));
+    }
+    const canonical = new Map<string, Paragraph>();
+    for (const p of batch.values()) if (!canonical.has(p.text)) canonical.set(p.text, p);
+    const chunks = buildChunks([...canonical.values()].map(p => ({ id: p.id, text: p.text })));
+    task.total += chunks.length;
+    for (const chunk of chunks) {
+      const req: TranslateRequest = {
+        kind: 'translate', taskId: task.id, chunkId: `c${chunkSeq++}`, stream: true,
+        units: chunk.units.map(u => ({ paragraphId: u.paragraphId, text: u.text, sliceIndex: u.sliceIndex, sliceTotal: u.sliceTotal })),
+      };
+      sendChunk({ chunk: req, retries: 0, timer: null });
+    }
+    notify({ kind: 'progress', done: task.done, total: task.total });
+    if (pool.size === 0) stopTicker();
+  } catch { /* 单次轮询异常不杀死定时器 */ }
+}
+
+function startTicker(): void {
+  if (ticker !== null) return;
+  ticker = setInterval(pump, POOL_TICK_MS);
+}
+
+function stopTicker(): void {
+  if (ticker !== null) { clearInterval(ticker); ticker = null; }
+}
+
+// 后台标签页暂停轮询（TWP 同款），恢复可见时立即补一次泵
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    stopTicker();
+  } else if (task && !task.cancelled && pool.size > 0) {
+    startTicker();
+    pump();
+  }
+});
+
 function onChunkTimeout(chunkId: string): void {
   if (!task || task.cancelled) return;
   const entry = task.pending.get(chunkId);
@@ -184,10 +251,13 @@ function markChunkError(chunk: TranslateRequest): void {
   if (!task) return;
   for (const u of chunk.units) {
     const p = task.paragraphs.get(u.paragraphId);
-    if (p) {
-      task.errors.add(u.paragraphId);
-      p.element.setAttribute(STATE_ATTR, 'error');
-      const host = findHost(task, u.paragraphId);
+    if (!p) continue;
+    for (const pid of aliasIds(task, p)) {
+      const q = task.paragraphs.get(pid);
+      if (!q) continue;
+      task.errors.add(pid);
+      q.element.setAttribute(STATE_ATTR, 'error');
+      const host = findHost(task, pid);
       if (host) setHostState(host, 'error');
     }
   }
@@ -197,9 +267,10 @@ function completeChunk(): void {
   if (!task) return;
   task.done++;
   notify({ kind: 'progress', done: task.done, total: task.total });
-  if (task.done >= task.total) {
+  if (task.done >= task.total && pool.size === 0 && task.pending.size === 0) {
     notify({ kind: 'task-state', state: 'done' });
     stopObserverOnly();
+    stopTicker();
     // 仍有失败段落时保留 task（静默态），供重试按钮继续工作
     if (task.errors.size === 0) task = null;
   }
@@ -228,33 +299,20 @@ async function startTranslate(): Promise<void> {
     console.log('[llm-tr] startTranslate: paragraphs =', paragraphs.length); // [diag]
     if (paragraphs.length === 0) { notify({ kind: 'task-state', state: 'done' }); return; }
 
-    const chunks = buildChunks(paragraphs.map(p => ({ id: p.id, text: p.text })));
-    console.log('[llm-tr] startTranslate: chunks =', chunks.length); // [diag]
     const id = `task-${Date.now()}`;
     task = {
-      id, cancelled: false, total: chunks.length, done: 0,
+      id, cancelled: false, total: 0, done: 0,
       pending: new Map(), sliceBuffers: new Map(),
-      paragraphs: new Map(paragraphs.map(p => [p.id, p])),
+      paragraphs: new Map(),
       errors: new Set(),
       observer: null,
+      aliases: buildAliases(paragraphs),
     };
     notify({ kind: 'task-state', state: 'running' });
-
-    for (const p of paragraphs) {
-      p.element.setAttribute(STATE_ATTR, 'pending');
-      ensureHost(p.element, hostId(id, p.id));
-    }
-    console.log('[llm-tr] startTranslate: hosts created =', document.querySelectorAll(`[${HOST_ATTR}]`).length); // [diag]
+    pool.addAll(paragraphs);
     startObserver();
-
-    chunks.forEach((chunk, i) => {
-      const req: TranslateRequest = {
-        kind: 'translate', taskId: id, chunkId: `c${i}`, stream: true,
-        units: chunk.units.map(u => ({ paragraphId: u.paragraphId, text: u.text, sliceIndex: u.sliceIndex, sliceTotal: u.sliceTotal })),
-      };
-      sendChunk({ chunk: req, retries: 0, timer: null });
-    });
-    console.log('[llm-tr] startTranslate: chunks posted to port'); // [diag]
+    startTicker();
+    pump();
   } finally {
     starting = false;
   }
@@ -268,8 +326,12 @@ function onChunkDelta(msg: Extract<TranslateResponse, { kind: 'delta' }>): void 
   const buf = task.sliceBuffers.get(msg.paragraphId) ?? { total: msg.sliceTotal, parts: [] };
   buf.parts[msg.sliceIndex] = (buf.parts[msg.sliceIndex] ?? '') + msg.text;
   task.sliceBuffers.set(msg.paragraphId, buf);
-  const host = findHost(task, msg.paragraphId);
-  if (host) setHostState(host, 'streaming', buf.parts.join(''));
+  const joined = buf.parts.join('');
+  const p = task.paragraphs.get(msg.paragraphId);
+  for (const pid of (p ? aliasIds(task, p) : [msg.paragraphId])) {
+    const host = findHost(task, pid);
+    if (host) setHostState(host, 'streaming', joined);
+  }
   armTimer(entry); // 有增量即续期：只有真卡住 60s 无增量才重发
 }
 
@@ -331,9 +393,14 @@ function onChunkResponse(msg: TranslateResponse | LookupResponse): void {
       if (buf.parts.filter(Boolean).length === buf.total) {
         const p = task.paragraphs.get(t.paragraphId);
         if (p) {
-          p.element.setAttribute(STATE_ATTR, 'done');
-          const host = findHost(task, t.paragraphId);
-          if (host) setHostState(host, 'done', buf.parts.join(''));
+          const text = buf.parts.join('');
+          for (const pid of aliasIds(task, p)) {
+            const q = task.paragraphs.get(pid);
+            if (!q) continue;
+            q.element.setAttribute(STATE_ATTR, 'done');
+            const host = findHost(task, pid);
+            if (host) setHostState(host, 'done', text);
+          }
         }
       }
     }
@@ -396,6 +463,8 @@ function cancelTask(opts?: { silent?: boolean }): void {
   task.pending.clear();
   task.errors.clear();
   stopObserverOnly();
+  pool.clear();
+  stopTicker();
   task = null;
   if (!opts?.silent) notify({ kind: 'task-state', state: 'idle' });
 }
@@ -431,7 +500,6 @@ function isSelfMutation(m: MutationRecord): boolean {
 }
 
 let extracting = false;
-let incSeq = 0;
 
 async function onNewContent(): Promise<void> {
   if (!task || task.cancelled || extracting || !contextAlive()) return;
@@ -439,22 +507,10 @@ async function onNewContent(): Promise<void> {
   try {
     const fresh = await collectParagraphs();
     if (!task || task.cancelled || fresh.length === 0) return;
-    const chunks = buildChunks(fresh.map(p => ({ id: p.id, text: p.text })), 1500);
-    task.total += chunks.length;
-    for (const p of fresh) {
-      task.paragraphs.set(p.id, p);
-      p.element.setAttribute(STATE_ATTR, 'pending');
-      ensureHost(p.element, hostId(task.id, p.id));
-    }
-    const batch = incSeq++;
-    chunks.forEach((chunk, i) => {
-      const req: TranslateRequest = {
-        kind: 'translate', taskId: task!.id, chunkId: `c-inc-${batch}-${i}`, stream: true,
-        units: chunk.units.map(u => ({ paragraphId: u.paragraphId, text: u.text, sliceIndex: u.sliceIndex, sliceTotal: u.sliceTotal })),
-      };
-      sendChunk({ chunk: req, retries: 0, timer: null });
-    });
-    notify({ kind: 'progress', done: task.done, total: task.total });
+    mergeAliases(task.aliases, fresh);
+    pool.addAll(fresh);
+    startTicker();
+    pump();
   } finally {
     extracting = false;
   }
