@@ -405,7 +405,10 @@ function onChunkResponse(msg: TranslateResponse | LookupResponse): void {
       }
     }
     if (isRetryChunk(msg.chunkId)) {
-      for (const t of msg.translations) task.errors.delete(t.paragraphId);
+      for (const t of msg.translations) {
+        const p = task.paragraphs.get(t.paragraphId);
+        for (const pid of (p ? aliasIds(task, p) : [t.paragraphId])) task.errors.delete(pid);
+      }
       // 静默态任务的最后一批失败段落重试成功：释放 task
       if (task.done >= task.total && task.errors.size === 0) {
         task = null;
@@ -421,9 +424,12 @@ function onChunkResponse(msg: TranslateResponse | LookupResponse): void {
 function retryAllErrors(): void {
   if (!task) return;
   notify({ kind: 'task-state', state: 'running' });
+  const seen = new Set<string>(); // 同文本只发一个 retry 块（canonical 成功后扇出删除别名）
   for (const pid of task.errors) {
     const p = task.paragraphs.get(pid);
     if (!p) { task.errors.delete(pid); continue; }
+    if (seen.has(p.text)) continue;
+    seen.add(p.text);
     p.element.setAttribute(STATE_ATTR, 'pending');
     const host = findHost(task, p.id);
     if (host) setHostState(host, 'loading');
