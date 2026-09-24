@@ -21,6 +21,7 @@ export interface Settings {
   minLength: number;
   cjkRatioThreshold: number;
   selectionTranslate: boolean;
+  catMode: boolean;
   /** 废弃：仅用于读取合并与旧数据迁移，saveSettings 不再写入 */
   baseUrl: string;
   /** 废弃：同上 */
@@ -45,6 +46,7 @@ export const DEFAULT_SETTINGS: Settings = {
   minLength: 20,
   cjkRatioThreshold: 0.3,
   selectionTranslate: true,
+  catMode: true,
   baseUrl: 'https://api.deepseek.com',
   apiKey: '',
   model: 'deepseek-chat',

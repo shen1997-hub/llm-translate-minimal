@@ -148,6 +148,7 @@ async function loadGlobals(): Promise<void> {
   langSelect.value = s.targetLang;
   ($('minLength') as HTMLInputElement).value = String(s.minLength);
   ($('cjkRatioThreshold') as HTMLInputElement).value = String(s.cjkRatioThreshold);
+  ($('catMode') as HTMLInputElement).checked = s.catMode;
   ($('blacklist') as HTMLTextAreaElement).value = s.blacklist.join('\n');
 }
 
@@ -157,6 +158,7 @@ $('save').addEventListener('click', async () => {
     targetLang: ($('targetLang') as HTMLSelectElement).value || '简体中文',
     minLength: Number(($('minLength') as HTMLInputElement).value) || 20,
     cjkRatioThreshold: Number(($('cjkRatioThreshold') as HTMLInputElement).value) || 0.3,
+    catMode: ($('catMode') as HTMLInputElement).checked,
     blacklist: ($('blacklist') as HTMLTextAreaElement).value.split('\n').map(x => x.trim()).filter(Boolean),
   });
   $('status').textContent = '已保存';

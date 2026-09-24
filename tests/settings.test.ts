@@ -146,3 +146,11 @@ describe('providers CRUD', () => {
     expect(s.providers.find(p => p.id === 'pv-2')!.activeModel).toBe('glm-4-flash');
   });
 });
+
+  it('catMode 默认 true 且可持久化往返', async () => {
+    const s = await getSettings();
+    expect(s.catMode).toBe(true);
+    await saveSettings({ catMode: false });
+    const s2 = await getSettings();
+    expect(s2.catMode).toBe(false);
+  });
