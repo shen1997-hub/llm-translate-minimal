@@ -53,6 +53,8 @@ const CAT_CSS = `
 }
 .cat[data-state="beckon"] .bubble { opacity: 1; }
 .cat[data-state="beckon"] .paw { animation: cat-paw 0.9s ease-in-out infinite; }
+.cat[data-perch="1"] .bubble { opacity: 0; }
+.cat[data-perch="1"] .paw { animation: none; }
 .cat[data-state="alert"] .ear-l { transform: rotate(-10deg); }
 .cat[data-state="alert"] .ear-r { transform: rotate(10deg); }
 .cat[data-state="happy"] .tail { animation-duration: 0.6s; }
@@ -108,10 +110,14 @@ export function createCat(doc: Document, opts: { reducedMotion: boolean; onClick
   let anim: Animation | null = null;
   let destroyed = false;
 
+  function clearMoveTimer(): void {
+    if (moveTimer !== null) { clearTimeout(moveTimer); moveTimer = null; }
+  }
+
   function clearTimers(): void {
     if (alertTimer !== null) { clearTimeout(alertTimer); alertTimer = null; }
     if (happyTimer !== null) { clearTimeout(happyTimer); happyTimer = null; }
-    if (moveTimer !== null) { clearTimeout(moveTimer); moveTimer = null; }
+    clearMoveTimer();
   }
 
   function armIdle(): void {
@@ -138,7 +144,7 @@ export function createCat(doc: Document, opts: { reducedMotion: boolean; onClick
   }
 
   function move(p: { x: number; y: number }, ms: number, frames: { transform: string; offset?: number }[], done: CatEvent): void {
-    if (moveTimer !== null) { clearTimeout(moveTimer); moveTimer = null; }
+    clearMoveTimer();
     cancelAnim();
     if (typeof el.animate !== 'function') {
       // jsdom 等无 WAAPI 环境：瞬时落点 + 同步派发 done
@@ -210,6 +216,9 @@ export function createCat(doc: Document, opts: { reducedMotion: boolean; onClick
     },
     perchAt(x, y) {
       if (destroyed) return;
+      // 取消进行中的位移动画与 done 定时器：perch 落点不被 return 动画压住、状态不被落成 dock
+      cancelAnim();
+      clearMoveTimer();
       setPoint({ x, y });
     },
     destroy() {

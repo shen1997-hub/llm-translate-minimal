@@ -202,6 +202,36 @@ describe('createSelectionUI', () => {
     expect(cbs.onDotClick).toHaveBeenCalled();
   });
 
+  it('catMode：选区滚出视口后 scroll 触发猫回停靠（文档坐标锚点判定）', () => {
+    const { ui } = makeUI();
+    ui.setCatMode(true);
+    ui.showDot(120, 80);
+    expect(ui.isDotVisible()).toBe(true);
+    Object.defineProperty(window, 'scrollY', { value: 600, configurable: true });
+    try {
+      document.dispatchEvent(new Event('scroll'));
+      expect(ui.isDotVisible()).toBe(false); // 猫已回停靠
+    } finally {
+      Object.defineProperty(window, 'scrollY', { value: 0, configurable: true });
+    }
+  });
+
+  it('catMode：点猫后开面板不启动 return 动画，猫打上 perch 标记', () => {
+    const { ui } = makeUI();
+    ui.setCatMode(true);
+    ui.showDot(120, 80);
+    const cat = ui.host.shadowRoot!.querySelector<HTMLElement>('.cat')!;
+    const animate = vi.fn(() => ({ cancel: vi.fn() }));
+    (cat as unknown as { animate: unknown }).animate = animate;
+    cat.click();
+    ui.hideDot(); // 真实链路：content 在 onDotClick 后同步调 hideDot
+    const callsBeforePanel = animate.mock.calls.length;
+    ui.showPanel(100, 100, 'm');
+    expect(cat.dataset.perch).toBe('1');
+    expect(callsBeforePanel).toBe(0); // 点猫后的 hideDot 未启动 return 动画
+    expect(animate.mock.calls.length).toBeLessThanOrEqual(callsBeforePanel);
+  });
+
   it('catMode=false：回圆钮路径', () => {
     const { ui } = makeUI();
     ui.setCatMode(false);
