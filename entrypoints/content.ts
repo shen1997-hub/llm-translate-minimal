@@ -618,6 +618,8 @@ function initSelectionTranslate(ctx: ContentScriptContext): void {
     },
   });
 
+  void getSettings().then((s) => selUI?.setCatMode(s.catMode)).catch(() => { /* 上下文失效：忽略 */ });
+
   // ctx.addEventListener：上下文失效后监听器自动摘除，残留实例不再响应用户手势
   ctx.addEventListener(document, 'mouseup', (e) => {
     if (selUI && selUI.pathInside(e.composedPath())) return; // 点击圆钮/浮窗自身的 mouseup 不触发
@@ -625,6 +627,7 @@ function initSelectionTranslate(ctx: ContentScriptContext): void {
       if (!contextAlive()) return;
       const s = await getSettings();
       if (!s.selectionTranslate) return;
+      selUI?.setCatMode(s.catMode);
       if (await currentHostBlacklisted()) return;
       showDotAtSelection();
     })().catch(() => { /* 上下文失效：忽略 */ });
