@@ -148,6 +148,18 @@ describe('extractParagraphs', () => {
     const ps = extractParagraphs(r, OPTS, visible);
     expect(ps).toHaveLength(1);
   });
+
+  it('跳过表：notranslate / translate=no / contenteditable / 图标字体', () => {
+    const r = root(`
+      <div class="notranslate"><p>${LONG}</p></div>
+      <div translate="no"><p>${LONG}</p></div>
+      <div contenteditable="true"><p>${LONG}</p></div>
+      <p class="material-icons">${LONG}</p>
+      <div class="CodeMirror"><p>${LONG}</p></div>
+      <p>${LONG}</p>`);
+    const ps = extractParagraphs(r, OPTS, visible);
+    expect(ps).toHaveLength(1);
+  });
 });
 
 describe('cjkRatio', () => {

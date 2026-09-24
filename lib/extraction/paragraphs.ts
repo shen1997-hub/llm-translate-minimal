@@ -17,6 +17,10 @@ const INLINE_TAGS = new Set([
 // div 候选用更严的长度阈值，避免抓到卡片/按钮等碎文本
 const DIV_MIN_LENGTH = 60;
 
+// 业界跳过约定与图标/代码字体容器（借鉴 TWP）：整棵子树不翻译
+export const SKIPPED_ANCESTOR_SELECTOR =
+  '.notranslate, [translate="no"], [contenteditable]:not([contenteditable="false"]), .CodeMirror, .material-icons, .material-symbols-outlined, .material-symbols-rounded';
+
 export function cjkRatio(text: string): number {
   const nonSpace = text.replace(/\s/g, '');
   if (nonSpace.length === 0) return 0;
@@ -53,8 +57,8 @@ export function extractParagraphs(
     ? `${CANDIDATE_SELECTOR}, ${rule.extraCandidates}`
     : CANDIDATE_SELECTOR;
   const excludedAncestors = rule?.extraExcludes
-    ? `${EXCLUDED_ANCESTOR_SELECTOR}, ${rule.extraExcludes}`
-    : EXCLUDED_ANCESTOR_SELECTOR;
+    ? `${EXCLUDED_ANCESTOR_SELECTOR}, ${SKIPPED_ANCESTOR_SELECTOR}, ${rule.extraExcludes}`
+    : `${EXCLUDED_ANCESTOR_SELECTOR}, ${SKIPPED_ANCESTOR_SELECTOR}`;
 
   const result: Paragraph[] = [];
   let seq = 0;
