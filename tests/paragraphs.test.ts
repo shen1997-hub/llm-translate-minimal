@@ -143,6 +143,20 @@ describe('extractParagraphs', () => {
     expect(ps.some(p => p.element.closest('.Layout-sidebar'))).toBe(true);
   });
 
+  it('GitHub 规则：blob 页代码视图行不翻译', () => {
+    const rule = siteRuleFor('github.com');
+    const code = "const savedTheme = localStorage.getItem('theme') || 'light'; // sufficiently long code line for test";
+    const r = root(`
+      <div class="react-code-view">
+        <div class="react-code-line"><div class="react-code-text"><span>${code}</span></div></div>
+        <div class="react-code-line"><div class="react-code-text"><span>${code}</span></div></div>
+      </div>
+      <p>${LONG}</p>`);
+    const ps = extractParagraphs(r, OPTS, visible, rule);
+    expect(ps).toHaveLength(1);
+    expect(ps.some(p => p.element.closest('[class*="react-code-"]'))).toBe(false);
+  });
+
   it('GitHub 规则：无规则时 aside 内的 About 会被通用排除拦下', () => {
     const r = root(`<aside class="Layout-sidebar"><p>${LONG_BLOCK}</p></aside><p>${LONG}</p>`);
     const ps = extractParagraphs(r, OPTS, visible);

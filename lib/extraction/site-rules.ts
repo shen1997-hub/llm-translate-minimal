@@ -18,7 +18,7 @@ const GITHUB_RULE: SiteRule = {
   rootSelector: 'main, [role="main"]',
   // GitHub 的屏幕阅读器专用副本（clip 裁剪隐藏，display 非 none），其文本与可见副本重复；
   // 文件树的 commit message 列属于元信息，不翻译
-  extraExcludes: '.sr-only, .visually-hidden, .react-directory-row-commit-cell, .commit-tease, [data-testid="latest-commit"], [class*="commit-message"]',
+  extraExcludes: '.sr-only, .visually-hidden, .react-directory-row-commit-cell, .commit-tease, [data-testid="latest-commit"], [class*="commit-message"], [class*="react-code-"], [class*="blob-code"], .highlight',
   // About 等仓库信息位于 .Layout-sidebar，可能被 aside/sidebar 通用规则排除，这里显式保留
   extraIncludes: '.Layout-sidebar',
 };
