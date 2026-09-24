@@ -17,7 +17,7 @@
 
 - 复用现有划词 shadow 宿主（`SEL_HOST_ATTR`）：z-index 顶层、宿主 `pointer-events:none`、交互元素自身 `auto` 的成熟模式不变。
 - 新增 `.cat`（`<button>`，shadow 内）与 `.dot` 互斥：`catMode=true` 时不显示 dot，反之不创建猫的动画循环。
-- 停靠位：`position: fixed; right: -18px`，垂直 60% 视口高；可见宽约 26px（头与前爪）。
+- 停靠位：`position: fixed; right: -18px` 等效（`dockPoint` 为 `{vw-26, vh-72}`），垂直贴近视口底部以避开正文拖选热区；可见宽约 26px（头与前爪）。
 - 存在条件：https 页面、`selectionTranslate` 开启、`catMode` 开启；打印媒体隐藏。
 
 ## 2. 状态机
@@ -39,7 +39,7 @@
 ## 3. 动效与性能
 
 - 全部动画仅 `transform` / `opacity`（WAAPI 或 CSS keyframes），不触发 layout。
-- jump：上升慢下落快的贝塞尔；squash & stretch 用 scaleY。
+- jump：上升慢下落快的贝塞尔；squash & stretch 用 scaleX+scaleY 双轴（起跳 `scale(0.94,1.08)`、落地 `scale(1.06,0.92)`）。
 - `prefers-reduced-motion: reduce`：jump/return 退化为 120ms 位移 + 淡入，无抛物线无 squash；beckon 气泡不循环闪动。
 - 猫为内联 SVG（约 2KB，无外部资源）。
 
