@@ -177,7 +177,10 @@ function pump(): void {
       VIEWPORT_MARGIN,
     );
     if (taken.length === 0) {
-      if (pool.size === 0) stopTicker();
+      if (pool.size === 0) {
+        maybeFinish(); // prune 排空池后已发 chunk 可能全部完成，需重新评估完成条件
+        stopTicker();
+      }
       return;
     }
     // 别名扩展：同文本段落一并取出，只发一份文本
@@ -210,6 +213,8 @@ function pump(): void {
 
 function startTicker(): void {
   if (ticker !== null) return;
+  // 后台标签页不推进翻译：隐藏期间 onNewContent 等入口不重启轮询
+  if (document.visibilityState !== 'visible') return;
   ticker = setInterval(pump, POOL_TICK_MS);
 }
 
@@ -267,6 +272,12 @@ function completeChunk(): void {
   if (!task) return;
   task.done++;
   notify({ kind: 'progress', done: task.done, total: task.total });
+  maybeFinish();
+}
+
+// 完成判定与收尾：条件不满足时什么都不做；pump 排空池后也会调用补评估
+function maybeFinish(): void {
+  if (!task) return;
   if (task.done >= task.total && pool.size === 0 && task.pending.size === 0) {
     notify({ kind: 'task-state', state: 'done' });
     stopObserverOnly();
