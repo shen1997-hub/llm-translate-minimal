@@ -375,3 +375,91 @@ test('划词流式：面板先出现译文前缀，收流后补全', async ({ co
   await expect(body).toHaveText('译文0', { timeout: 15_000 });
   await stubControl(request, 'reset=1');
 });
+
+test('同文本别名扇出：重复段落只发一次请求，两处宿主块都显示译文', async ({ context, extensionId, request }) => {
+  const driver = await openDriver(context, extensionId);
+  const page = await openTestPage(context, driver);
+
+  // start 之前追加两段完全相同的长段落
+  const dupText = 'This duplicated long English paragraph is appended twice to verify alias fanout dedupe.';
+  await page.evaluate((text) => {
+    const article = document.querySelector('article')!;
+    for (let i = 0; i < 2; i++) {
+      const p = document.createElement('p');
+      p.textContent = text;
+      article.appendChild(p);
+    }
+  }, dupText);
+
+  await sendToTestPage(driver, { kind: 'start' });
+
+  const hosts = page.locator(HOST);
+  await expect(hosts).toHaveCount(4, { timeout: 15_000 });
+  for (let i = 0; i < 4; i++) {
+    await expect(hosts.nth(i)).toContainText('译文', { timeout: 15_000 });
+  }
+
+  // 重复文本在所有请求体中总共只出现 1 次（别名按规范文本去重，只发一份）
+  const res = await request.get(`${STUB_ORIGIN}/__control?stats=1`);
+  const { bodies } = (await res.json()) as { bodies: string[] };
+  expect(bodies.join('\n').split(dupText).length - 1).toBe(1);
+});
+
+test('视口惰性调度：视口外段落滚动进入后才翻译', async ({ context, extensionId }) => {
+  const driver = await openDriver(context, extensionId);
+  const page = await openTestPage(context, driver);
+
+  // 两段之后插入 3000px 占位，再追加第三段：原两段留在视口内，第三段被推到视口+200px 之外
+  const tailText = 'This trailing long English paragraph sits far below the fold until the user scrolls down.';
+  await page.evaluate((text) => {
+    const article = document.querySelector('article')!;
+    const spacer = document.createElement('div');
+    spacer.style.height = '3000px';
+    article.insertBefore(spacer, article.querySelector('#counter-btn'));
+    const p = document.createElement('p');
+    p.id = 'tail-paragraph';
+    p.textContent = text;
+    article.appendChild(p);
+  }, tailText);
+
+  // 钉死前置条件：追加段落确实在视口 +200px 之外
+  const farBelow = await page.evaluate(() => {
+    const p = document.getElementById('tail-paragraph')!;
+    return p.getBoundingClientRect().top > window.innerHeight + 200;
+  });
+  expect(farBelow).toBe(true);
+
+  await sendToTestPage(driver, { kind: 'start' });
+  await page.waitForTimeout(1000);
+
+  // 只有视口内的两段被取出建宿主块；第三段留在惰性池里
+  const hosts = page.locator(HOST);
+  expect(await hosts.count()).toBe(2);
+
+  // 滚动到底部后，池泵在下一个 tick 取出第三段
+  await page.evaluate(() => window.scrollTo(0, 3000));
+  await expect(hosts).toHaveCount(3, { timeout: 15_000 });
+  await expect(hosts.nth(2)).toContainText('译文', { timeout: 15_000 });
+});
+
+test('取消后延迟到达的陈旧响应被代际拦截', async ({ context, extensionId, request }) => {
+  await stubControl(request, 'delay=2000');
+  const driver = await openDriver(context, extensionId);
+  const page = await openTestPage(context, driver);
+
+  await sendToTestPage(driver, { kind: 'start' });
+  // 等宿主块建好（请求已在飞）再取消，保证 cancel 落在 start 建任务之后
+  const hosts = page.locator(HOST);
+  await expect(hosts).toHaveCount(2, { timeout: 15_000 });
+  await sendToTestPage(driver, { kind: 'cancel' });
+
+  // 等延迟响应实际到达（2s）并留出投递余量：陈旧响应应被忽略
+  await page.waitForTimeout(3000);
+
+  expect(await hosts.count()).toBe(2);
+  for (let i = 0; i < 2; i++) {
+    await expect(hosts.nth(i)).not.toContainText('译文');
+    await expect(hosts.nth(i)).toContainText('翻译中'); // 仍停在等待态
+  }
+  await stubControl(request, 'reset=1');
+});

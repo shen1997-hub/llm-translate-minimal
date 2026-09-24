@@ -10,18 +10,22 @@ interface StubState {
   delayMs: number;
   holdStream: boolean;
   releaseStream: boolean;
+  bodies: string[];
 }
+
+const MAX_RECORDED_BODIES = 100;
 
 const STREAM_FRAME_GAP_MS = 30;
 
 // 供 globalSetup 启动的本地打桩服务：
 // - /page 托管测试页（file:// 不注入 content script，必须走 http）
 // - /chat/completions、/v1/messages 模拟 OpenAI/Claude；请求体 stream:true 时按 SSE 分帧返回
-// - /__control 供用例切换失败模式/响应延迟/流式挂起（用例进程与 globalSetup 进程不同，只能走 HTTP 控制）
+// - /__control 供用例切换失败模式/响应延迟/流式挂起（用例进程与 globalSetup 进程不同，只能走 HTTP 控制）；
+//   带 stats=1 时响应并入 bodies（历次翻译请求的原始请求体，reset 清空，上限 MAX_RECORDED_BODIES 条）
 // 附带 CORS 头：MV3 service worker 跨域 fetch 在无 host 权限时按 CORS 处理，保证 E2E 不依赖原生授权弹窗
 export function startStubServer(port = STUB_PORT): http.Server {
   const pageHtml = fs.readFileSync(path.resolve('e2e/test-page.html'), 'utf8');
-  const state: StubState = { fail: false, delayMs: 0, holdStream: false, releaseStream: false };
+  const state: StubState = { fail: false, delayMs: 0, holdStream: false, releaseStream: false, bodies: [] };
 
   return http
     .createServer((req, res) => {
@@ -50,13 +54,19 @@ export function startStubServer(port = STUB_PORT): http.Server {
           state.delayMs = 0;
           state.holdStream = false;
           state.releaseStream = false;
+          state.bodies = [];
         }
         if (url.searchParams.has('fail')) state.fail = url.searchParams.get('fail') === '1';
         if (url.searchParams.has('delay')) state.delayMs = Number(url.searchParams.get('delay')) || 0;
         if (url.searchParams.has('hold')) state.holdStream = url.searchParams.get('hold') === '1';
         if (url.searchParams.has('release')) state.releaseStream = url.searchParams.get('release') === '1';
         res.writeHead(200, { ...corsHeaders, 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(state));
+        if (url.searchParams.has('stats')) {
+          res.end(JSON.stringify(state));
+        } else {
+          const { bodies: _bodies, ...flags } = state;
+          res.end(JSON.stringify(flags));
+        }
         return;
       }
 
@@ -64,6 +74,8 @@ export function startStubServer(port = STUB_PORT): http.Server {
         let body = '';
         req.on('data', (c) => (body += c));
         req.on('end', () => {
+          state.bodies.push(body);
+          if (state.bodies.length > MAX_RECORDED_BODIES) state.bodies.shift();
           setTimeout(() => {
             if (state.fail) {
               // 400 不触发 429/5xx 退避，立即使整个分块失败（用于「失败段落可重试」用例）
