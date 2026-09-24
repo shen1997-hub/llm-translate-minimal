@@ -22,6 +22,18 @@ describe('ensureHost', () => {
     expect(host.parentElement).toBe(li);
   });
 
+  it('td/th：插到单元格内部末尾（单元格内换行显示）', () => {
+    const d = doc('<table><tr><td>cell text</td><th>head text</th></tr></table>');
+    const td = d.querySelector('td')!;
+    const th = d.querySelector('th')!;
+    const hostTd = ensureHost(td, 't1');
+    const hostTh = ensureHost(th, 't2');
+    expect(hostTd.parentElement).toBe(td);
+    expect(hostTh.parentElement).toBe(th);
+    // 行内不产生额外块：tr 的直接子元素仍只有两个单元格
+    expect(d.querySelectorAll('tr > *')).toHaveLength(2);
+  });
+
   it('grid 父容器：host 独占整行 (gridColumn: 1 / -1)', () => {
     const d = doc('<div style="display:grid"><p>text</p></div>');
     const p = d.querySelector('p')!;

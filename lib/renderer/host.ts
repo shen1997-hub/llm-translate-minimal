@@ -30,7 +30,9 @@ export function ensureHost(after: Element, hostId: string): HTMLElement {
   setLoading(doc, body);
   shadow.append(style, body);
 
-  if (after.tagName === 'LI') {
+  // li 与表格单元格：宿主块插进元素内部，译文在原文下方换行显示，
+  // 避免插到 tr/ul 层级破坏行布局
+  if (after.tagName === 'LI' || after.tagName === 'TD' || after.tagName === 'TH') {
     after.appendChild(host);
   } else {
     const parent = after.parentElement;
