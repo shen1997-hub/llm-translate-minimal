@@ -661,3 +661,43 @@ Expected: 通过；若环境缺浏览器（`Executable doesn't exist`），记�
 - [ ] **Step 4: 对照 spec 验收标准逐条确认**
 
 对照 `docs/superpowers/specs/2026-09-24-twp-hardening-design.md` 的 4 条验收标准，逐条标注已验证/待实测。
+
+---
+
+### Task 6: e2e 覆盖别名扇出与惰性调度（spec §6 测试缺口补齐）
+
+**Files:**
+- Modify: `e2e/stub-server.ts`（新增请求统计）
+- Modify: `e2e/translate.spec.ts`（新增 3 个用例）
+
+**Interfaces:**
+- Consumes: 既有 e2e 设施（`openDriver/openTestPage/sendToTestPage/stubControl/seedSettings`、`HOST` 选择器）。
+- Produces: 桩服务 `GET /__control?stats=1` 返回 `{ bodies: string[] }`（历次 `/chat/completions`、`/v1/messages` 的原始请求体，reset 时清空，最多保留 100 条）。
+
+- [ ] **Step 1: 桩服务加请求统计**
+
+`StubState` 增加 `bodies: string[]`（初始 `[]`）；`/chat/completions`、`/v1/messages` 的 `req.on('end')` 里 `state.bodies.push(body)`，超过 100 条时 shift；`reset` 时清空；`/__control` 带 `stats` 参数时在响应 JSON 里并入 `bodies`。
+
+- [ ] **Step 2: 别名扇出用例**
+
+`e2e/translate.spec.ts` 新增：开始前向 `article` 追加两段**完全相同**的英文长段落；start 后断言 4 个宿主块全部显示译文；然后从 `/__control?stats=1` 读 bodies，断言该重复段落的原文文本在所有请求体中总共只出现 1 次。
+
+- [ ] **Step 3: 惰性调度用例**
+
+向 `article` 内两段之前插入 3000px 占位 div，再在 `article` 末尾追加一个长段落（位于视口+200px 之外）；start 后等待 1 秒，断言只有 2 个宿主块；`window.scrollTo(0, 3000)` 后断言第 3 个宿主块出现并最终显示译文。
+
+- [ ] **Step 4: 代际拦截用例**
+
+`stubControl(request, 'delay=2000')`；start 后立即 `sendToTestPage(driver, { kind: 'cancel' })`；等待 3 秒（延迟响应已到达）；断言宿主块仍停在等待态（不包含"译文"）。
+
+- [ ] **Step 5: 运行 e2e**
+
+Run: `npx playwright test`
+Expected: 全部通过（含既有 16 个用例不回归）。
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add e2e/stub-server.ts e2e/translate.spec.ts
+git commit -m "test: e2e 覆盖别名扇出/视口惰性调度/取消后陈旧响应拦截"
+```
