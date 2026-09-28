@@ -10,7 +10,7 @@ import type { TranslateRequest, TranslateResponse, LookupRequest, LookupResponse
 import { ensureHost, setHostState, removeAllHosts, HOST_ATTR } from '../lib/renderer/host';
 import { createSelectionUI, SEL_HOST_ATTR } from '../lib/renderer/selection';
 import type { SelUI } from '../lib/renderer/selection';
-import { getSettings, getActiveProvider, resolveModel } from '../lib/settings';
+import { getSettings, saveSettings, getActiveProvider, resolveModel } from '../lib/settings';
 import type { ContentScriptContext } from '#imports';
 
 const STATE_ATTR = 'data-llm-translate-state';
@@ -616,9 +616,13 @@ function initSelectionTranslate(ctx: ContentScriptContext): void {
       speaking = true;
       speechSynthesis.speak(u);
     },
+    onCatDockMove: (dock) => { void saveSettings({ catDock: dock }).catch(() => { /* 上下文失效：忽略 */ }); },
   });
 
-  void getSettings().then((s) => selUI?.setCatMode(s.catMode)).catch(() => { /* 上下文失效：忽略 */ });
+  void getSettings().then((s) => {
+    selUI?.setCatMode(s.catMode);
+    selUI?.setCatDock(s.catDock ?? null);
+  }).catch(() => { /* 上下文失效：忽略 */ });
 
   // ctx.addEventListener：上下文失效后监听器自动摘除，残留实例不再响应用户手势
   ctx.addEventListener(document, 'mouseup', (e) => {
@@ -628,6 +632,7 @@ function initSelectionTranslate(ctx: ContentScriptContext): void {
       const s = await getSettings();
       if (!s.selectionTranslate) return;
       selUI?.setCatMode(s.catMode);
+      selUI?.setCatDock(s.catDock ?? null);
       if (await currentHostBlacklisted()) return;
       showDotAtSelection();
     })().catch(() => { /* 上下文失效：忽略 */ });
