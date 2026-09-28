@@ -128,3 +128,58 @@ test('选区清空后猫回停靠位', async ({ context, extensionId }) => {
   // 停靠位贴近视口右缘
   expect(dockBox.x).toBeGreaterThan(1200);
 });
+
+test('停靠猫可拖拽:拖到左半屏吸附左缘,且不弹出面板', async ({ context, extensionId }) => {
+  const driver = await openDriver(context, extensionId);
+  const page = await openTestPage(context, driver);
+
+  const cat = page.locator(`${SEL} .cat`);
+  await expect(cat).toBeVisible({ timeout: 10_000 });
+  const box = (await cat.boundingBox())!;
+  // 右缘 peek 只露 26px:可见带是 [box.x, box.x+26],取可见带中点按下
+  // (box.x+33=1287 已在 1280 视口之外,press 会落到 <html> 而不是猫)
+  await page.mouse.move(box.x + 13, box.y + 22);
+  await page.mouse.down();
+  // 鼠标指针没有隐式捕获:先在猫盒内跨过 6px 拖拽阈值拿到 pointer capture,
+  // 后续大步移动才不会因指针离开猫盒而丢事件(10 步直跳首帧就出盒,拖拽根本不会开始)
+  await page.mouse.move(box.x + 1, box.y + 22);
+  await page.mouse.move(300, 300, { steps: 10 });
+  await page.mouse.up();
+  await page.waitForTimeout(400); // 吸附滑移 200ms 兜底
+
+  const after = (await cat.boundingBox())!;
+  expect(after.x).toBeLessThan(0); // 左缘 peek x=-18
+  expect(after.y).toBeGreaterThan(0);
+  await expect(cat).toHaveAttribute('data-state', 'dock');
+  // 拖拽不触发开面板(click 被屏蔽;即便触发,无选区也不会开面板/发请求)
+  await expect(page.locator(`${SEL} .panel`)).toBeHidden();
+});
+
+test('拖拽位置持久化:刷新页面后仍停靠左缘', async ({ context, extensionId }) => {
+  const driver = await openDriver(context, extensionId);
+  const page = await openTestPage(context, driver);
+
+  const cat = page.locator(`${SEL} .cat`);
+  await expect(cat).toBeVisible({ timeout: 10_000 });
+  const box = (await cat.boundingBox())!;
+  // 同上一用例:可见带 [box.x, box.x+26] 内按下 + 盒内先跨阈值拿 pointer capture
+  await page.mouse.move(box.x + 13, box.y + 22);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 1, box.y + 22);
+  await page.mouse.move(300, 300, { steps: 10 });
+  await page.mouse.up();
+
+  // 等 onDockMove → saveSettings 落盘
+  await expect(async () => {
+    const s = await driver.evaluate(
+      async () => ((await chrome.storage.local.get('settings')) as { settings?: { catDock?: unknown } }).settings,
+    );
+    expect(s?.catDock).toEqual({ side: 'left', yRatio: expect.any(Number) });
+  }).toPass({ timeout: 3000 });
+
+  await page.reload();
+  const cat2 = page.locator(`${SEL} .cat`);
+  await expect(cat2).toBeVisible({ timeout: 10_000 });
+  const box2 = (await cat2.boundingBox())!;
+  expect(box2.x).toBeLessThan(0); // 仍贴左缘
+});
