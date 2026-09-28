@@ -66,6 +66,16 @@ describe('默认值与读写', () => {
     const s = await getSettings();
     expect(s.providers[0]!.protocol).toBe('openai');
   });
+
+  it('catDock 读写与校验:合法值透传,坏值回退 undefined,yRatio 夹取', async () => {
+    expect((await getSettings()).catDock).toBeUndefined();
+    await saveSettings({ catDock: { side: 'left', yRatio: 0.5 } });
+    expect((await getSettings()).catDock).toEqual({ side: 'left', yRatio: 0.5 });
+    store.set('settings', { catDock: { side: 'top', yRatio: 0.5 } });
+    expect((await getSettings()).catDock).toBeUndefined();
+    store.set('settings', { catDock: { side: 'left', yRatio: 1.8 } });
+    expect((await getSettings()).catDock).toEqual({ side: 'left', yRatio: 1 });
+  });
 });
 
 describe('旧单配置迁移', () => {

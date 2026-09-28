@@ -1,5 +1,13 @@
 export type ApiProtocol = 'openai' | 'claude';
 
+export type DockSide = 'left' | 'right';
+
+/** 猫咪停靠点存档:只记贴哪一侧与垂直比例,与视口宽度解耦 */
+export interface CatDock {
+  side: DockSide;
+  yRatio: number;
+}
+
 export interface Provider {
   id: string;
   name: string;
@@ -22,6 +30,8 @@ export interface Settings {
   cjkRatioThreshold: number;
   selectionTranslate: boolean;
   catMode: boolean;
+  /** 猫咪停靠点;undefined = 默认右下角 */
+  catDock?: CatDock;
   /** 废弃：仅用于读取合并与旧数据迁移，saveSettings 不再写入 */
   baseUrl: string;
   /** 废弃：同上 */
@@ -54,6 +64,15 @@ export const DEFAULT_SETTINGS: Settings = {
 
 const KEY = 'settings';
 
+// 读取侧校验:坏值当作未设置,回退默认右下角
+function sanitizeCatDock(v: unknown): CatDock | undefined {
+  if (typeof v !== 'object' || v === null) return undefined;
+  const d = v as Partial<Record<keyof CatDock, unknown>>;
+  if (d.side !== 'left' && d.side !== 'right') return undefined;
+  if (typeof d.yRatio !== 'number' || !Number.isFinite(d.yRatio)) return undefined;
+  return { side: d.side, yRatio: Math.max(0, Math.min(1, d.yRatio)) };
+}
+
 function stripDeprecated(s: Settings): Record<string, unknown> {
   const { baseUrl: _b, apiKey: _k, model: _m, ...rest } = s;
   return rest;
@@ -71,6 +90,7 @@ export async function getSettings(): Promise<Settings> {
   const stored = ((await chrome.storage.local.get(KEY))[KEY] ?? {}) as Partial<Settings>;
   const merged: Settings = { ...DEFAULT_SETTINGS, ...stored };
   merged.providers = merged.providers.map(p => ({ ...p, protocol: p.protocol ?? ('openai' as ApiProtocol) }));
+  merged.catDock = sanitizeCatDock(stored.catDock);
   // 惰性迁移：旧单配置 → 单供应商。只认存储里真实存在的旧字段，纯默认值不触发
   if (merged.providers.length === 0 && (stored.baseUrl || stored.apiKey || stored.model)) {
     const legacy: Provider = {
