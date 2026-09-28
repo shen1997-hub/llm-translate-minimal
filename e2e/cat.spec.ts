@@ -11,7 +11,9 @@ test('选中文字：猫跳到选区尾，不遮正文', async ({ context, exten
   const page = await openTestPage(context, driver);
 
   await page.evaluate(() => {
-    const p = document.querySelector('article p')!;
+    // 选第二段：猫盒 44px 高、锚点是选区尾 +8px，会向下探一行；
+    // 选首段会压到第二段行尾，第二段下方无正文行盒，几何上必然不相交
+    const p = document.querySelectorAll('article p')[1]!;
     const range = document.createRange();
     range.selectNodeContents(p);
     const sel = window.getSelection()!;
@@ -26,7 +28,7 @@ test('选中文字：猫跳到选区尾，不遮正文', async ({ context, exten
   await page.waitForTimeout(600);
   // 落在选区尾附近
   const catBox = (await cat.boundingBox())!;
-  const pBox = (await page.locator('article p').first().boundingBox())!;
+  const pBox = (await page.locator('article p').nth(1).boundingBox())!;
   expect(catBox.y).toBeGreaterThan(pBox.y - 40);
   expect(catBox.y).toBeLessThan(pBox.y + pBox.height + 60);
   // 不遮正文：猫与每个段落首文本节点的真实文本行盒都不相交（允许边界相切）
@@ -140,8 +142,7 @@ test('停靠猫可拖拽:拖到左半屏吸附左缘,且不弹出面板', async 
   // (box.x+33=1287 已在 1280 视口之外,press 会落到 <html> 而不是猫)
   await page.mouse.move(box.x + 13, box.y + 22);
   await page.mouse.down();
-  // 鼠标指针没有隐式捕获:先在猫盒内跨过 6px 拖拽阈值拿到 pointer capture,
-  // 后续大步移动才不会因指针离开猫盒而丢事件(10 步直跳首帧就出盒,拖拽根本不会开始)
+  // 按下已捕获,此步冗余,保留以防实现回退
   await page.mouse.move(box.x + 1, box.y + 22);
   await page.mouse.move(300, 300, { steps: 10 });
   await page.mouse.up();
@@ -162,7 +163,7 @@ test('拖拽位置持久化:刷新页面后仍停靠左缘', async ({ context, e
   const cat = page.locator(`${SEL} .cat`);
   await expect(cat).toBeVisible({ timeout: 10_000 });
   const box = (await cat.boundingBox())!;
-  // 同上一用例:可见带 [box.x, box.x+26] 内按下 + 盒内先跨阈值拿 pointer capture
+  // 同上一用例:可见带 [box.x, box.x+26] 内按下;盒内小位移——按下已捕获,此步冗余,保留以防实现回退
   await page.mouse.move(box.x + 13, box.y + 22);
   await page.mouse.down();
   await page.mouse.move(box.x + 1, box.y + 22);
