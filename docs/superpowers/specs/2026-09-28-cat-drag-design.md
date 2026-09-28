@@ -42,11 +42,14 @@
 - 非 dock 态不挂拖拽(判断 `state === 'dock'`);beckon/perch 行为完全不变。
 - 拖拽中若收到 `jumpTo`/`returnToDock` 等指令,拖拽中止(释放 capture,指令优先)。
 
-### 3. 编排层 `lib/renderer/selection.ts`
+### 3. 编排层 `lib/renderer/selection.ts` 与接线 `entrypoints/content.ts`
 
-- 构造 cat 时传 `onDockMove`:把 ratio 写入 settings 的 `catDock` 字段并 `chrome.storage.local.set({ settings })`。
-- `setCatMode(true)` 显示停靠猫时、以及 `returnToDock` 时,用 `resolveDockPoint(vw, vh, settings.catDock)` 替代 `dockPoint(vw, vh)`。
-- 监听 settings 变化(现有 storage onChanged 通路)时若 `catDock` 变化且猫在 dock 态,移动到新停靠点。
+selection.ts 是纯渲染层,不碰 chrome.storage;持久化与设置读取都在 content.ts(它已有 `getSettings`/`saveSettings` 通路):
+
+- `SelUICallbacks` 新增可选回调 `onCatDockMove?(ratio: DockRatio): void`,构造 cat 时透传为 `onDockMove`。
+- `SelUI` 新增 `setCatDock(dock: DockRatio | null): void`:用 `resolveDockPoint` 算出像素点交给猫(`cat.setDock`);若猫当前正停在 dock 态且可见,立即 `dockNow` 重定位。
+- 猫内部记住当前停靠点(`setDock`),`dockNow`/`returnToDock` 优先用覆盖值,无覆盖回退默认 `dockPoint`。
+- content.ts:实现 `onCatDockMove` → `saveSettings({ catDock: ratio })`;在现有的两处设置读取(初始化、每次 mouseup 重读)里顺带 `selUI.setCatDock(s.catDock ?? null)`。**不新增 storage.onChanged 监听**(内容脚本没有该通路,mouseup 重读已覆盖跨页同步)。
 
 ### 4. 设置 `lib/settings.ts`
 
@@ -59,8 +62,8 @@
 ```
 用户拖动停靠猫 → cat.ts 跟随 pointermove
   → pointerup → snapDockPoint 吸附 → WAAPI 滑到贴边
-  → onDockMove(ratio) → selection.ts 写 settings.catDock → chrome.storage.local
-其它页面/下次启动 → resolveDockPoint(vw, vh, settings.catDock) 还原位置
+  → onDockMove(ratio) → content.ts saveSettings({ catDock }) → chrome.storage.local
+其它页面/下次交互 → content.ts 读 settings → selUI.setCatDock → resolveDockPoint 还原
 ```
 
 ## 边界与错误处理
