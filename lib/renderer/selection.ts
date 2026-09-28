@@ -251,9 +251,11 @@ export function createSelectionUI(doc: Document, cbs: SelUICallbacks): SelUI {
     copyBtn.textContent = '📋';
     if (copyTimer !== null) { clearTimeout(copyTimer); copyTimer = null; }
     if (catMode) {
+      const perched = cat.el.dataset.perch === '1';
       delete cat.el.dataset.perch;
       panelDoc = null;
-      catReturn();
+      // 只在猫确实在外（外出/趴面板）时才归位；停靠/睡眠态原地蹦跳会打断 360ms return 窗口与拖拽
+      if (perched || catOut) catReturn();
       cat.el.hidden = false;
     }
   }
@@ -282,6 +284,7 @@ export function createSelectionUI(doc: Document, cbs: SelUICallbacks): SelUI {
     },
     hideDot() {
       dot.hidden = true;
+      if (catMode && !catOut) catClicked = false; // 停靠态点击的残留标记不带到下一次划词
       if (catMode && catOut) {
         // 点猫开面板：不启动 return 动画，位置交由 showPanel 的 perchAt 接管
         if (catClicked) {

@@ -232,6 +232,42 @@ describe('createSelectionUI', () => {
     expect(animate.mock.calls.length).toBeLessThanOrEqual(callsBeforePanel);
   });
 
+  it('catMode：hidePanel 只在猫外出/趴面板时归位，停靠猫不原地蹦', () => {
+    const { ui } = makeUI();
+    ui.setCatMode(true);
+    const cat = ui.host.shadowRoot!.querySelector<HTMLElement>('.cat')!;
+    // 桩住 WAAPI 才能观测 return：jsdom 无 animate 时 returnToDock 同步落成 dock，掩盖问题
+    const animate = vi.fn(() => ({ cancel: vi.fn() }));
+    (cat as unknown as { animate: unknown }).animate = animate;
+    // 停靠静止（从未 showDot）：hidePanel 不应启动 return——真实环境 360ms 内 state!=='dock' 会拒拖拽
+    const dockTransform = cat.style.transform;
+    ui.hidePanel();
+    expect(animate).not.toHaveBeenCalled();
+    expect(cat.dataset.state).toBe('dock');
+    expect(cat.style.transform).toBe(dockTransform);
+    // 趴面板（perch 标记）：hidePanel 仍应归位
+    ui.showDot(120, 80);
+    ui.showPanel(100, 100, 'm');
+    expect(cat.dataset.perch).toBe('1');
+    const callsBeforeHide = animate.mock.calls.length;
+    ui.hidePanel();
+    expect(animate.mock.calls.length).toBeGreaterThan(callsBeforeHide); // return 动画启动
+    expect(cat.dataset.perch).toBeUndefined();
+  });
+
+  it('catMode：停靠态点猫的残留标记不吞掉下次划词后的 return', () => {
+    const { ui } = makeUI();
+    ui.setCatMode(true);
+    const cat = ui.host.shadowRoot!.querySelector<HTMLElement>('.cat')!;
+    cat.click(); // 无选区点停靠猫：onClick 置 catClicked 但 catOut===false
+    ui.hideDot(); // 真实链路：onSelDotClick 同步调 hideDot（选区为空，不发请求）
+    ui.showDot(120, 80);
+    const anchorTransform = cat.style.transform; // jsdom 无 WAAPI，jumpTo 同步落锚点
+    ui.hideDot(); // 划词后点页面清空：残留标记若未消费会跳过 catReturn，猫冻结在锚点
+    expect(cat.style.transform).toContain('translate(998px, 696px)'); // 回了停靠
+    expect(cat.style.transform).not.toBe(anchorTransform);
+  });
+
   it('catMode=false：回圆钮路径', () => {
     const { ui } = makeUI();
     ui.setCatMode(false);
