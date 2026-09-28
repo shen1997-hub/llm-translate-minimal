@@ -259,7 +259,6 @@ export function createCat(doc: Document, opts: { reducedMotion: boolean; onClick
     const origin = { x: dragStart.x, y: dragStart.y };
     cancelDrag();
     if (!wasDrag) return;
-    suppressClick = true;
     slideTo(origin, 120);
   });
   el.addEventListener('pointerenter', () => {

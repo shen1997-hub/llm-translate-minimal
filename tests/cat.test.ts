@@ -201,4 +201,14 @@ describe('停靠猫拖拽', () => {
     expect(onDockMove).not.toHaveBeenCalled();
     expect(cat.el.style.transform).toContain('translate(1254px, 648px)');
   });
+
+  it('pointercancel 不吞后续点击', () => {
+    const { cat, onClick } = makeDrag();
+    cat.dockNow(1280, 720);
+    pointer(cat.el, 'pointerdown', 1267, 660);
+    pointer(cat.el, 'pointermove', 667, 400);
+    pointer(cat.el, 'pointercancel', 667, 400);
+    cat.el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
 });
