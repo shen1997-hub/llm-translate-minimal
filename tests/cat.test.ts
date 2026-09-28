@@ -202,6 +202,15 @@ describe('停靠猫拖拽', () => {
     expect(cat.el.style.transform).toContain('translate(1254px, 648px)');
   });
 
+  it('pointerdown 即捕获指针(快速甩动首帧出盒也能拖)', () => {
+    const { cat } = makeDrag();
+    const capture = vi.fn();
+    (cat.el as unknown as { setPointerCapture: unknown }).setPointerCapture = capture;
+    cat.dockNow(1280, 720);
+    pointer(cat.el, 'pointerdown', 1267, 660);
+    expect(capture).toHaveBeenCalledTimes(1);
+  });
+
   it('pointercancel 不吞后续点击', () => {
     const { cat, onClick } = makeDrag();
     cat.dockNow(1280, 720);

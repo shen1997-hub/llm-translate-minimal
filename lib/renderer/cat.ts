@@ -215,6 +215,10 @@ export function createCat(doc: Document, opts: { reducedMotion: boolean; onClick
     if (destroyed || state !== 'dock' || e.button !== 0) return;
     dragStart = { px: e.clientX, py: e.clientY, x: point.x, y: point.y };
     dragMoved = false;
+    // 按下即捕获:鼠标无隐式捕获,快速甩动若首帧 pointermove 已出盒则收不到事件
+    if (typeof el.setPointerCapture === 'function') {
+      try { el.setPointerCapture(e.pointerId); } catch { /* jsdom 等无实现环境 */ }
+    }
   });
   el.addEventListener('pointermove', (e) => {
     if (dragStart === null || destroyed) return;
@@ -222,13 +226,10 @@ export function createCat(doc: Document, opts: { reducedMotion: boolean; onClick
     const dy = e.clientY - dragStart.py;
     if (!dragMoved) {
       if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
-      // 进入拖动:取消进行中的位移动画并接管指针
+      // 进入拖动:取消进行中的位移动画(指针已在 pointerdown 捕获)
       dragMoved = true;
       cancelAnim();
       clearMoveTimer();
-      if (typeof el.setPointerCapture === 'function') {
-        try { el.setPointerCapture(e.pointerId); } catch { /* jsdom 等无实现环境 */ }
-      }
       el.classList.add('dragging');
     }
     const win = doc.defaultView;
