@@ -48,6 +48,17 @@ export function jumpKeyframes(
   ];
 }
 
+// 视口可用尺寸:clientWidth/clientHeight 排除经典滚动条(innerWidth 含滚动条,
+// 右缘停靠会被滚动条盖住);jsdom 等 clientWidth 为 0 的环境回退 innerWidth
+export function viewportSize(doc: Document): { vw: number; vh: number } {
+  const el = doc.documentElement;
+  const win = doc.defaultView;
+  return {
+    vw: el.clientWidth || win?.innerWidth || 1024,
+    vh: el.clientHeight || win?.innerHeight || 768,
+  };
+}
+
 // 松手点吸附到最近的左/右缘(保持 peek 露头),y 夹取保证垂直方向完整可见
 export function snapDockPoint(x: number, y: number, vw: number, vh: number): { x: number; y: number; side: DockSide } {
   const side: DockSide = x + CAT_SIZE / 2 < vw / 2 ? 'left' : 'right';

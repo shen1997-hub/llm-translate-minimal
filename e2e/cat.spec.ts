@@ -184,3 +184,19 @@ test('拖拽位置持久化:刷新页面后仍停靠左缘', async ({ context, e
   const box2 = (await cat2.boundingBox())!;
   expect(box2.x).toBeLessThan(0); // 仍贴左缘
 });
+
+test('右侧停靠不被经典滚动条遮挡', async ({ context, extensionId }) => {
+  const driver = await openDriver(context, extensionId);
+  const page = await openTestPage(context, driver);
+
+  const cat = page.locator(`${SEL} .cat`);
+  await expect(cat).toBeVisible({ timeout: 10_000 });
+  // 制造纵向溢出逼出经典滚动条;点击页面触发设置重读 → setCatMode → 重新停靠
+  await page.addStyleTag({ content: 'body { min-height: 3000px; }' });
+  await page.mouse.click(640, 60);
+  await page.waitForTimeout(300);
+  const box = (await cat.boundingBox())!;
+  const clientWidth = await page.evaluate(() => document.documentElement.clientWidth);
+  // 右缘 peek:左边界 = clientWidth - 26,可见带完整位于滚动条左侧
+  expect(box.x).toBeCloseTo(clientWidth - 26, 0);
+});

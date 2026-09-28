@@ -1,6 +1,6 @@
 import {
   nextCatState, dockPoint, jumpKeyframes, snapDockPoint, toCatDock,
-  CAT_SIZE, DOCK_VISIBLE,
+  CAT_SIZE, DOCK_VISIBLE, viewportSize,
   type CatState, type CatEvent,
 } from './cat-state';
 import type { CatDock } from '../settings';
@@ -232,9 +232,7 @@ export function createCat(doc: Document, opts: { reducedMotion: boolean; onClick
       clearMoveTimer();
       el.classList.add('dragging');
     }
-    const win = doc.defaultView;
-    const vw = win?.innerWidth ?? 1024;
-    const vh = win?.innerHeight ?? 768;
+    const { vw, vh } = viewportSize(doc);
     setPoint({
       x: Math.max(-(CAT_SIZE - DOCK_VISIBLE), Math.min(dragStart.x + dx, vw - DOCK_VISIBLE)),
       y: Math.max(0, Math.min(dragStart.y + dy, vh - CAT_SIZE)),
@@ -246,9 +244,7 @@ export function createCat(doc: Document, opts: { reducedMotion: boolean; onClick
     cancelDrag();
     if (!wasDrag || destroyed) return;
     suppressClick = true;
-    const win = doc.defaultView;
-    const vw = win?.innerWidth ?? 1024;
-    const vh = win?.innerHeight ?? 768;
+    const { vw, vh } = viewportSize(doc);
     const snap = snapDockPoint(point.x, point.y, vw, vh);
     dockOverride = { x: snap.x, y: snap.y };
     slideTo({ x: snap.x, y: snap.y }, 200);

@@ -1,7 +1,7 @@
 import { MOTION_CSS, replayPop, setLoading } from './motion';
 import type { WordEntry } from '../translation/prompt';
 import { createCat } from './cat';
-import { selectionAnchor, resolveDockPoint } from './cat-state';
+import { selectionAnchor, resolveDockPoint, viewportSize } from './cat-state';
 import type { CatDock } from '../settings';
 
 export const SEL_HOST_ATTR = 'data-llm-translate-sel';
@@ -210,8 +210,8 @@ export function createSelectionUI(doc: Document, cbs: SelUICallbacks): SelUI {
   }
 
   function catReturn(): void {
-    const win = doc.defaultView;
-    cat.returnToDock(win?.innerWidth ?? 1024, win?.innerHeight ?? 768);
+    const { vw, vh } = viewportSize(doc);
+    cat.returnToDock(vw, vh);
   }
 
   // 选区滚出视口：猫回停靠，不追着跑；面板打开期间猫随面板滚动跟随
@@ -303,16 +303,14 @@ export function createSelectionUI(doc: Document, cbs: SelUICallbacks): SelUI {
       cat.el.hidden = !on;
       if (on) {
         dot.hidden = true;
-        const win = doc.defaultView;
-        cat.dockNow(win?.innerWidth ?? 1024, win?.innerHeight ?? 768);
+        const { vw, vh } = viewportSize(doc);
+        cat.dockNow(vw, vh);
       } else {
         catOut = false;
       }
     },
     setCatDock(dock) {
-      const win = doc.defaultView;
-      const vw = win?.innerWidth ?? 1024;
-      const vh = win?.innerHeight ?? 768;
+      const { vw, vh } = viewportSize(doc);
       cat.setDock(dock ? resolveDockPoint(vw, vh, dock) : null);
       // 猫正停靠且可见:立即搬到新位置;外出/趴面板时不动,等 return 自然生效
       if (catMode && !catOut && cat.el.dataset.perch !== '1' && !cat.el.hidden && cat.state === 'dock') {

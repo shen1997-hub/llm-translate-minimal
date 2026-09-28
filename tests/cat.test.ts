@@ -220,4 +220,19 @@ describe('停靠猫拖拽', () => {
     cat.el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(onClick).toHaveBeenCalledTimes(1);
   });
+
+  it('拖拽几何用 clientWidth(排除滚动条):右缘吸附 x = clientWidth - 26', () => {
+    // 模拟经典滚动条:innerWidth 1280 含滚动条,clientWidth 1265 不含
+    Object.defineProperty(document.documentElement, 'clientWidth', { value: 1265, configurable: true });
+    try {
+      const { cat } = makeDrag();
+      cat.dockNow(1280, 720);
+      pointer(cat.el, 'pointerdown', 1267, 660);
+      pointer(cat.el, 'pointermove', 1000, 400); // → point (987, 388),中心 1009 ≥ 1265/2 → 右缘
+      pointer(cat.el, 'pointerup', 1000, 400);
+      expect(cat.el.style.transform).toContain('translate(1239px, 388px)'); // 1265 - 26
+    } finally {
+      Object.defineProperty(document.documentElement, 'clientWidth', { value: 0, configurable: true });
+    }
+  });
 });

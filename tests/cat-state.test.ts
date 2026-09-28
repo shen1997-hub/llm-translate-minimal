@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   nextCatState, dockPoint, selectionAnchor, jumpKeyframes,
-  snapDockPoint, toCatDock, resolveDockPoint,
+  snapDockPoint, toCatDock, resolveDockPoint, viewportSize,
 } from '../lib/renderer/cat-state';
 
 describe('nextCatState', () => {
@@ -92,5 +92,20 @@ describe('toCatDock / resolveDockPoint', () => {
   it('往返一致:snap → toCatDock → resolveDockPoint', () => {
     const s = snapDockPoint(100, 300, 1280, 720);
     expect(resolveDockPoint(1280, 720, toCatDock(s.side, s.y, 720))).toEqual({ x: s.x, y: s.y });
+  });
+});
+
+describe('viewportSize', () => {
+  it('clientWidth 非 0 时优先(排除经典滚动条),为 0 回退 innerWidth', () => {
+    // jsdom:clientWidth/clientHeight 为 0 → 回退 innerWidth
+    expect(viewportSize(document)).toEqual({ vw: 1024, vh: 768 });
+    Object.defineProperty(document.documentElement, 'clientWidth', { value: 1265, configurable: true });
+    Object.defineProperty(document.documentElement, 'clientHeight', { value: 705, configurable: true });
+    try {
+      expect(viewportSize(document)).toEqual({ vw: 1265, vh: 705 });
+    } finally {
+      Object.defineProperty(document.documentElement, 'clientWidth', { value: 0, configurable: true });
+      Object.defineProperty(document.documentElement, 'clientHeight', { value: 0, configurable: true });
+    }
   });
 });

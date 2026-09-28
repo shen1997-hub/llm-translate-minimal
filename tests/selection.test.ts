@@ -322,3 +322,17 @@ describe('setCatDock', () => {
     expect(cbs.onCatDockMove).toHaveBeenCalledWith({ side: 'left', yRatio: 386 / 768 });
   });
 });
+
+describe('滚动条遮挡', () => {
+  it('停靠用 clientWidth(排除滚动条):dockNow 右缘 x = clientWidth - 26', () => {
+    Object.defineProperty(document.documentElement, 'clientWidth', { value: 1265, configurable: true });
+    try {
+      const { ui } = makeUI();
+      ui.setCatMode(true);
+      const cat = ui.host.shadowRoot!.querySelector<HTMLElement>('.cat')!;
+      expect(cat.style.transform).toContain('translate(1239px, 696px)'); // dockPoint(1265, 768)
+    } finally {
+      Object.defineProperty(document.documentElement, 'clientWidth', { value: 0, configurable: true });
+    }
+  });
+});
