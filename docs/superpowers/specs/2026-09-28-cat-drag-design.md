@@ -22,22 +22,25 @@
 
 ### 1. 纯函数层 `lib/renderer/cat-state.ts`
 
-新增三个纯函数,全部可单测:
+新增常量与三个纯函数,全部可单测:
 
-- `snapDockPoint(x, y, vw, vh): { x, y }`
-  松手点 `(x, y)` 吸附:按猫中心 `x + 22` 与 `vw/2` 比较,贴左缘或右缘,保持现有「只露头」peek 语义——左缘 `x = -18`,右缘 `x = vw - 26`(与 `dockPoint` 一致);`y` clamp 到 `[0, vh - 44]`(猫高 44px,保证完整可见)。吸附常量抽成导出常量,与 `dockPoint` 共用。
-- `toDockRatio(x, y, vw, vh): { xRatio, yRatio }`
-  像素坐标转视口比例(0–1),存储用。
-- `resolveDockPoint(vw, vh, saved?: { xRatio, yRatio } | null): { x, y }`
-  有 saved 时按比例还原并 clamp 到视口内;无 saved 时返回现有 `dockPoint(vw, vh)` 默认值。替代现有 `dockPoint` 的全部调用点。
+- 常量:`CAT_SIZE = 44`、`DOCK_VISIBLE = 26`(停靠 peek:水平只露 26px——右缘 `x = vw - 26`,左缘 `x = -18`,与 `dockPoint` 共用)。
+- `snapDockPoint(x, y, vw, vh): { x, y, side }`
+  松手点 `(x, y)` 吸附:按猫中心 `x + 22` 与 `vw/2` 比较,贴左缘(`x = -18`)或右缘(`x = vw - 26`);`y` clamp 到 `[0, vh - 44]`。`side` 为 `'left' | 'right'`。
+- `toCatDock(side, y, vh): CatDock`
+  吸附点转持久化形态 `{ side, yRatio }`——只记贴哪一侧与垂直比例,不记 x 比例,视口宽度变化后仍准确贴缘。
+- `resolveDockPoint(vw, vh, saved?: CatDock | null): { x, y }`
+  有 saved 时按 side 贴缘、y 按比例还原并 clamp;无 saved 时返回现有 `dockPoint(vw, vh)` 默认值。
+
+`CatDock` / `DockSide` 类型定义在 `lib/settings.ts`(持久化形态归设置层),cat-state 只做 type import。
 
 ### 2. 渲染器 `lib/renderer/cat.ts`
 
-- `createCat` options 新增回调 `onDockMove?(ratio: { xRatio: number; yRatio: number }): void`。
+- `createCat` options 新增回调 `onDockMove?(dock: CatDock): void`。
 - 停靠态(`data-state="dock"`)的 `pointerdown` 启动拖拽:
   - 记录起始指针位置与猫当前位置;`setPointerCapture` 捕获。
   - 移动超过阈值 **6px** 才进入拖动:直接 `setPoint` 跟随指针(猫中心对齐指针),`cursor: grabbing`;未超阈值不干预,保持点击语义。
-  - `pointerup`:若处于拖动,调 `snapDockPoint` 得落点,用现有 WAAPI 位移动画(~200ms ease-out)滑到贴边位置,动画结束后调 `onDockMove(toDockRatio(...))`;同时置拖拽标记,**屏蔽随后的 click 事件**(不触发开面板)。
+  - `pointerup`:若处于拖动,调 `snapDockPoint` 得落点,用 WAAPI 短滑移(~200ms ease-out)滑到贴边位置,并调 `onDockMove(toCatDock(...))`;同时置拖拽标记,**屏蔽随后的 click 事件**(不触发开面板)。
   - `pointercancel`:视为放弃,猫动画回原停靠位,不触发 onDockMove。
 - 非 dock 态不挂拖拽(判断 `state === 'dock'`);beckon/perch 行为完全不变。
 - 拖拽中若收到 `jumpTo`/`returnToDock` 等指令,拖拽中止(释放 capture,指令优先)。
@@ -46,29 +49,29 @@
 
 selection.ts 是纯渲染层,不碰 chrome.storage;持久化与设置读取都在 content.ts(它已有 `getSettings`/`saveSettings` 通路):
 
-- `SelUICallbacks` 新增可选回调 `onCatDockMove?(ratio: DockRatio): void`,构造 cat 时透传为 `onDockMove`。
-- `SelUI` 新增 `setCatDock(dock: DockRatio | null): void`:用 `resolveDockPoint` 算出像素点交给猫(`cat.setDock`);若猫当前正停在 dock 态且可见,立即 `dockNow` 重定位。
+- `SelUICallbacks` 新增可选回调 `onCatDockMove?(dock: CatDock): void`,构造 cat 时透传为 `onDockMove`。
+- `SelUI` 新增 `setCatDock(dock: CatDock | null): void`:用 `resolveDockPoint` 算出像素点交给猫(`cat.setDock`);若猫当前正停在 dock 态且可见,立即 `dockNow` 重定位。
 - 猫内部记住当前停靠点(`setDock`),`dockNow`/`returnToDock` 优先用覆盖值,无覆盖回退默认 `dockPoint`。
-- content.ts:实现 `onCatDockMove` → `saveSettings({ catDock: ratio })`;在现有的两处设置读取(初始化、每次 mouseup 重读)里顺带 `selUI.setCatDock(s.catDock ?? null)`。**不新增 storage.onChanged 监听**(内容脚本没有该通路,mouseup 重读已覆盖跨页同步)。
+- content.ts:实现 `onCatDockMove` → `saveSettings({ catDock: dock })`;在现有的两处设置读取(初始化、每次 mouseup 重读)里顺带 `selUI.setCatDock(s.catDock ?? null)`。**不新增 storage.onChanged 监听**(内容脚本没有该通路,mouseup 重读已覆盖跨页同步)。
 
 ### 4. 设置 `lib/settings.ts`
 
-- `Settings` 类型新增可选字段:`catDock?: { xRatio: number; yRatio: number }`。
+- `Settings` 类型新增可选字段:`catDock?: CatDock`(`{ side: 'left' | 'right'; yRatio: number }`)。
 - 默认值:`undefined`(即默认右下角)。设置页**不新增 UI**;`catMode` 复选框保持不变。
-- 读取侧对 `catDock` 做形状校验(两个有限 number,0–1 区间),非法值当作 undefined。
+- 读取侧对 `catDock` 做形状校验(side 必须是 left/right、yRatio 为有限 number 并夹取到 0–1),非法值当作 undefined。
 
 ## 数据流
 
 ```
 用户拖动停靠猫 → cat.ts 跟随 pointermove
   → pointerup → snapDockPoint 吸附 → WAAPI 滑到贴边
-  → onDockMove(ratio) → content.ts saveSettings({ catDock }) → chrome.storage.local
+  → onDockMove({ side, yRatio }) → content.ts saveSettings({ catDock }) → chrome.storage.local
 其它页面/下次交互 → content.ts 读 settings → selUI.setCatDock → resolveDockPoint 还原
 ```
 
 ## 边界与错误处理
 
-- **窗口缩放**:存比例不存像素,resize 后按比例还原并 clamp,不会跑出屏外。
+- **窗口缩放**:只存 side 与垂直比例,resize 后 x 由 side 决定始终贴缘,y 按比例还原并 clamp,不会跑出屏外。
 - **点击 vs 拖拽**:6px 阈值;拖过阈值屏蔽 click;未超阈值保持原点击开面板行为。
 - **非法存储值**:读取时校验,坏值回退默认右下角。
 - **极小视口**:y 向 clamp 保证猫不超出上下边缘;x 向本来就是 peek 半露头设计,允许部分在屏外。
@@ -78,7 +81,7 @@ selection.ts 是纯渲染层,不碰 chrome.storage;持久化与设置读取都�
 单测(`tests/cat-state.test.ts` 或新文件):
 
 - `snapDockPoint`:左半屏松手贴左缘、右半屏贴右缘、y 越界 clamp
-- `toDockRatio` / `resolveDockPoint` 往返一致;无 saved 回退默认 dockPoint;非法 saved 忽略
+- `toCatDock` / `resolveDockPoint` 往返一致;无 saved 回退默认 dockPoint;非法 saved 由 settings 读取侧拦截
 
 e2e(`e2e/cat.spec.ts` 新增用例):
 
