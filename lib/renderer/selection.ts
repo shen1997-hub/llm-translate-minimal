@@ -1,7 +1,8 @@
 import { MOTION_CSS, replayPop, setLoading } from './motion';
 import type { WordEntry } from '../translation/prompt';
 import { createCat } from './cat';
-import { selectionAnchor } from './cat-state';
+import { selectionAnchor, resolveDockPoint } from './cat-state';
+import type { CatDock } from '../settings';
 
 export const SEL_HOST_ATTR = 'data-llm-translate-sel';
 
@@ -11,6 +12,8 @@ export interface SelUICallbacks {
   onRetry(): void;
   onCopy(text: string): void;
   onSpeak(text: string): void;
+  /** 停靠猫被拖到新位置:调用方负责持久化 */
+  onCatDockMove?(dock: CatDock): void;
 }
 
 export interface SelUI {
@@ -20,6 +23,8 @@ export interface SelUI {
   isDotVisible(): boolean;
   /** 猫咪助手开关：true 时划词入口由猫履行，false 回简洁圆钮 */
   setCatMode(on: boolean): void;
+  /** 设置猫咪停靠点存档;null 恢复默认右下角。猫正停在 dock 态时立即重定位 */
+  setCatDock(dock: CatDock | null): void;
   showPanel(x: number, y: number, model: string): void;
   setPanelState(state: 'loading' | 'done' | 'error', text?: string): void;
   /** 流式增量：切到流式态并追加到面板正文尾部 */
@@ -142,6 +147,7 @@ export function createSelectionUI(doc: Document, cbs: SelUICallbacks): SelUI {
   const cat = createCat(doc, {
     reducedMotion: doc.defaultView?.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false,
     onClick: () => { catClicked = true; cbs.onDotClick(); },
+    onDockMove: (d) => cbs.onCatDockMove?.(d),
   });
   cat.el.hidden = true;
   shadow.append(style, dot, cat.el, panel);
@@ -298,6 +304,16 @@ export function createSelectionUI(doc: Document, cbs: SelUICallbacks): SelUI {
         cat.dockNow(win?.innerWidth ?? 1024, win?.innerHeight ?? 768);
       } else {
         catOut = false;
+      }
+    },
+    setCatDock(dock) {
+      const win = doc.defaultView;
+      const vw = win?.innerWidth ?? 1024;
+      const vh = win?.innerHeight ?? 768;
+      cat.setDock(dock ? resolveDockPoint(vw, vh, dock) : null);
+      // 猫正停靠且可见:立即搬到新位置;外出/趴面板时不动,等 return 自然生效
+      if (catMode && !catOut && cat.el.dataset.perch !== '1' && !cat.el.hidden && cat.state === 'dock') {
+        cat.dockNow(vw, vh);
       }
     },
     showPanel(x, y, model) {

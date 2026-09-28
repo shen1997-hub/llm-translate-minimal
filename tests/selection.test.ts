@@ -5,7 +5,7 @@ import type { SelUI, SelUICallbacks } from '../lib/renderer/selection';
 function makeUI(): { ui: SelUI; cbs: Record<keyof SelUICallbacks, ReturnType<typeof vi.fn>> } {
   const cbs = {
     onDotClick: vi.fn(), onClose: vi.fn(), onRetry: vi.fn(),
-    onCopy: vi.fn(), onSpeak: vi.fn(),
+    onCopy: vi.fn(), onSpeak: vi.fn(), onCatDockMove: vi.fn(),
   };
   return { ui: createSelectionUI(document, cbs), cbs };
 }
@@ -240,5 +240,49 @@ describe('createSelectionUI', () => {
     const cat = ui.host.shadowRoot!.querySelector<HTMLElement>('.cat')!;
     expect(dot.hidden).toBe(false);
     expect(cat.hidden).toBe(true);
+  });
+});
+
+describe('setCatDock', () => {
+  it('dock 态可见时立即重定位到存档点(jsdom 视口 1024x768)', () => {
+    const { ui } = makeUI();
+    ui.setCatMode(true);
+    const cat = ui.host.shadowRoot!.querySelector<HTMLElement>('.cat')!;
+    expect(cat.style.transform).toContain('translate(998px, 696px)'); // 默认右下
+    ui.setCatDock({ side: 'left', yRatio: 0.5 });
+    expect(cat.style.transform).toContain('translate(-18px, 384px)');
+  });
+
+  it('null 恢复默认右下角', () => {
+    const { ui } = makeUI();
+    ui.setCatMode(true);
+    ui.setCatDock({ side: 'left', yRatio: 0.5 });
+    ui.setCatDock(null);
+    const cat = ui.host.shadowRoot!.querySelector<HTMLElement>('.cat')!;
+    expect(cat.style.transform).toContain('translate(998px, 696px)');
+  });
+
+  it('猫外出时不重定位,回停靠后落存档点', () => {
+    const { ui } = makeUI();
+    ui.setCatMode(true);
+    ui.showDot(120, 80);
+    const cat = ui.host.shadowRoot!.querySelector<HTMLElement>('.cat')!;
+    ui.setCatDock({ side: 'left', yRatio: 0.5 });
+    expect(cat.dataset.state).not.toBe('dock'); // 外出期间不搬
+    ui.hideDot(); // clear → return,jsdom 无 WAAPI 同步落点
+    expect(cat.style.transform).toContain('translate(-18px, 384px)');
+  });
+
+  it('猫拖拽回调透传 onCatDockMove', () => {
+    const { ui, cbs } = makeUI();
+    ui.setCatMode(true);
+    const cat = ui.host.shadowRoot!.querySelector<HTMLElement>('.cat')!;
+    // dock (998,696);按下 (1010,710),拖到 (500,400) → point (488,386),中心 510 < 512 → 左缘
+    const pointer = (type: string, x: number, y: number) =>
+      cat.dispatchEvent(new MouseEvent(type, { bubbles: true, clientX: x, clientY: y, button: 0 }));
+    pointer('pointerdown', 1010, 710);
+    pointer('pointermove', 500, 400);
+    pointer('pointerup', 500, 400);
+    expect(cbs.onCatDockMove).toHaveBeenCalledWith({ side: 'left', yRatio: 386 / 768 });
   });
 });
