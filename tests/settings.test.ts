@@ -75,6 +75,10 @@ describe('默认值与读写', () => {
     expect((await getSettings()).catDock).toBeUndefined();
     store.set('settings', { catDock: { side: 'left', yRatio: 1.8 } });
     expect((await getSettings()).catDock).toEqual({ side: 'left', yRatio: 1 });
+    store.set('settings', { catDock: { side: 'left', yRatio: -0.4 } });
+    expect((await getSettings()).catDock).toEqual({ side: 'left', yRatio: 0 });
+    store.set('settings', { catDock: null });
+    expect((await getSettings()).catDock).toBeUndefined();
   });
 });
 
