@@ -6,3 +6,6 @@ dist
 playwright-report
 test-results
 .idea/
+# 调试截图（e2e 自审产物）与手工拷贝的构建产物，均不入库
+error/
+浏览器插件/
