@@ -11,6 +11,7 @@ import { ensureHost, setHostState, removeAllHosts, HOST_ATTR } from '../lib/rend
 import { createSelectionUI, SEL_HOST_ATTR } from '../lib/renderer/selection';
 import type { SelUI } from '../lib/renderer/selection';
 import { getSettings, saveSettings, getActiveProvider, resolveModel } from '../lib/settings';
+import type { Settings } from '../lib/settings';
 import type { ContentScriptContext } from '#imports';
 
 const STATE_ATTR = 'data-llm-translate-state';
@@ -86,10 +87,10 @@ function stableId(el: Element): string {
   return id;
 }
 
-async function currentHostBlacklisted(): Promise<boolean> {
-  const s = await getSettings();
+async function currentHostBlacklisted(s?: Settings): Promise<boolean> {
+  const settings = s ?? await getSettings();
   const host = location.hostname;
-  return s.blacklist.some(d => host === d || host.endsWith('.' + d)) || s.disabledSites.includes(host);
+  return settings.blacklist.some(d => host === d || host.endsWith('.' + d)) || settings.disabledSites.includes(host);
 }
 
 const SITE_RULE = siteRuleFor(location.hostname);
@@ -619,22 +620,33 @@ function initSelectionTranslate(ctx: ContentScriptContext): void {
     onCatDockMove: (dock) => { void saveSettings({ catDock: dock }).catch(() => { /* 上下文失效：忽略 */ }); },
   });
 
-  void getSettings().then((s) => {
-    selUI?.setCatMode(s.catMode);
-    selUI?.setCatDock(s.catDock ?? null);
-  }).catch(() => { /* 上下文失效：忽略 */ });
+  /**
+   * 把当前设置同步进划词 UI（猫开关/停靠点）。黑名单与停用站点一律收回猫咪入口：
+   * setCatMode 若晚于 UI 展示路径执行，猫会先出现再被翻译流程拦截，且停靠猫可点击
+   * 直通 onSelDotClick，等于在停用站点上保留了一个绕过黑名单的划词翻译入口。
+   * 返回 false 表示当前站点不允许展示划词入口（含圆钮），调用方不得再 showDot。
+   */
+  async function syncSelectionUI(): Promise<boolean> {
+    if (!selUI) return false;
+    const s = await getSettings();
+    if (!s.selectionTranslate) return false;
+    if (await currentHostBlacklisted(s)) {
+      selUI.setCatMode(false);
+      return false;
+    }
+    selUI.setCatMode(s.catMode);
+    selUI.setCatDock(s.catDock ?? null);
+    return true;
+  }
+
+  void syncSelectionUI().catch(() => { /* 上下文失效：忽略 */ });
 
   // ctx.addEventListener：上下文失效后监听器自动摘除，残留实例不再响应用户手势
   ctx.addEventListener(document, 'mouseup', (e) => {
     if (selUI && selUI.pathInside(e.composedPath())) return; // 点击圆钮/浮窗自身的 mouseup 不触发
     void (async () => {
       if (!contextAlive()) return;
-      const s = await getSettings();
-      if (!s.selectionTranslate) return;
-      selUI?.setCatMode(s.catMode);
-      selUI?.setCatDock(s.catDock ?? null);
-      if (await currentHostBlacklisted()) return;
-      showDotAtSelection();
+      if (await syncSelectionUI()) showDotAtSelection();
     })().catch(() => { /* 上下文失效：忽略 */ });
   });
 
@@ -666,6 +678,8 @@ function initSelectionTranslate(ctx: ContentScriptContext): void {
 
 async function onSelDotClick(): Promise<void> {
   if (!selUI || !contextAlive()) return;
+  // 防御：黑名单/停用站点的划词入口（圆钮或猫）一律不响应，设置可能在页面打开后才变更
+  if (await currentHostBlacklisted()) { selUI.hideDot(); return; }
   const text = selectionText();
   selUI.hideDot();
   if (text.length < 2) return; // 选区已取消：不发请求
