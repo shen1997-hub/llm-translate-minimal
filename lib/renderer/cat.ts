@@ -303,6 +303,8 @@ export function createCat(doc: Document, opts: { reducedMotion: boolean; onClick
       // 取消进行中的位移动画与 done 定时器：perch 落点不被 return 动画压住、状态不被落成 dock
       cancelAnim();
       clearMoveTimer();
+      // 趴面板期间解除空闲入睡：状态仍是 dock，20s idle 会让猫闭眼冒 zzz 在面板顶上
+      if (idleTimer !== null) { clearTimeout(idleTimer); idleTimer = null; }
       setPoint({ x, y });
     },
     setDock(p) {

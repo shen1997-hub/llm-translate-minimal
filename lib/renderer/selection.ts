@@ -167,6 +167,7 @@ export function createSelectionUI(doc: Document, cbs: SelUICallbacks): SelUI {
   let copyTimer: ReturnType<typeof setTimeout> | null = null;
   let catMode = false;
   let catOut = false;
+  let savedDock: CatDock | null = null; // 最近一次 setCatDock 的存档，resize 时按新视口重算
   let catClicked = false; // 猫被点击：随后的 hideDot 不启动 return 动画（面板接管位置）
   let catAnchorDoc = { x: 0, y: 0 }; // 文档坐标锚点，滚动后换算视口坐标做滚出检测
   let panelDoc: { x: number; y: number } | null = null; // 面板打开时的文档坐标，供猫随滚动跟随
@@ -195,12 +196,14 @@ export function createSelectionUI(doc: Document, cbs: SelUICallbacks): SelUI {
   downBtn.addEventListener('click', () => { downBtn.classList.toggle('active'); upBtn.classList.remove('active'); });
 
   // 调用方传入的是文档坐标（含滚动偏移），而夹取边界是视口尺寸：
-  // 先换算成视口坐标夹取，再折算回文档坐标，否则页面滚动后会被错误地夹回页面顶部
+  // 先换算成视口坐标夹取，再折算回文档坐标，否则页面滚动后会被错误地夹回页面顶部。
+  // 视口尺寸用 clientWidth/Height（排除经典滚动条），与猫停靠几何同口径
   function clampToViewport(x: number, y: number, w: number, h: number): { x: number; y: number } {
     const win = doc.defaultView;
     const sx = win?.scrollX ?? 0;
     const sy = win?.scrollY ?? 0;
-    const p = clampPosition(x - sx, y - sy, w, h, win?.innerWidth ?? 1024, win?.innerHeight ?? 768);
+    const { vw, vh } = viewportSize(doc);
+    const p = clampPosition(x - sx, y - sy, w, h, vw, vh);
     return { x: p.x + sx, y: p.y + sy };
   }
 
@@ -223,9 +226,7 @@ export function createSelectionUI(doc: Document, cbs: SelUICallbacks): SelUI {
       return;
     }
     if (!catOut) return;
-    const win = doc.defaultView;
-    const vw = win?.innerWidth ?? 1024;
-    const vh = win?.innerHeight ?? 768;
+    const { vw, vh } = viewportSize(doc);
     const v = viewportOf(catAnchorDoc.x, catAnchorDoc.y);
     if (v.x < 0 || v.x > vw || v.y < 0 || v.y > vh) {
       catOut = false;
@@ -234,6 +235,19 @@ export function createSelectionUI(doc: Document, cbs: SelUICallbacks): SelUI {
     }
   }
   doc.addEventListener('scroll', onScroll, { passive: true });
+
+  // 视口缩放：停靠点是像素坐标，缩窗后猫会悬在旧位置部分出界——按存档比例重算重摆
+  function onResize(): void {
+    if (!catMode) return;
+    const { vw, vh } = viewportSize(doc);
+    cat.setDock(savedDock ? resolveDockPoint(vw, vh, savedDock) : null);
+    // 只重摆停靠/睡眠态；外出（beckon）与趴面板（perch）分别由滚出/面板滚动逻辑接管
+    if (!catOut && cat.el.dataset.perch !== '1' && !cat.el.hidden
+        && (cat.state === 'dock' || cat.state === 'sleep')) {
+      cat.dockNow(vw, vh);
+    }
+  }
+  doc.defaultView?.addEventListener('resize', onResize);
 
   function clampPanel(x: number, y: number): { x: number; y: number } {
     return clampToViewport(x, y, panel.offsetWidth || 340, panel.offsetHeight || 160);
@@ -299,17 +313,17 @@ export function createSelectionUI(doc: Document, cbs: SelUICallbacks): SelUI {
     },
     isDotVisible: () => (catMode ? catOut : !dot.hidden),
     setCatMode(on) {
+      const was = catMode;
       catMode = on;
       cat.el.hidden = !on;
-      if (on) {
-        dot.hidden = true;
-        const { vw, vh } = viewportSize(doc);
-        cat.dockNow(vw, vh);
-      } else {
-        catOut = false;
-      }
+      if (!on) { catOut = false; return; }
+      if (was) return; // 已开启时不重复 dockNow：mouseup 每次都同步设置，重复归位会打断 return 动画
+      dot.hidden = true;
+      const { vw, vh } = viewportSize(doc);
+      cat.dockNow(vw, vh);
     },
     setCatDock(dock) {
+      savedDock = dock;
       const { vw, vh } = viewportSize(doc);
       cat.setDock(dock ? resolveDockPoint(vw, vh, dock) : null);
       // 猫正停靠且可见:立即搬到新位置;外出/趴面板时不动,等 return 自然生效
@@ -443,6 +457,7 @@ export function createSelectionUI(doc: Document, cbs: SelUICallbacks): SelUI {
     destroy() {
       if (copyTimer !== null) clearTimeout(copyTimer);
       doc.removeEventListener('scroll', onScroll);
+      doc.defaultView?.removeEventListener('resize', onResize);
       cat.destroy();
       host.remove();
     },
