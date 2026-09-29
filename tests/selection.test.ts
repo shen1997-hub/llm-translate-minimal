@@ -277,6 +277,37 @@ describe('createSelectionUI', () => {
     expect(dot.hidden).toBe(false);
     expect(cat.hidden).toBe(true);
   });
+
+  it('catMode：视口缩放后停靠猫按新视口重摆（缩窗不出界）', () => {
+    const { ui } = makeUI();
+    ui.setCatMode(true);
+    const cat = ui.host.shadowRoot!.querySelector<HTMLElement>('.cat')!;
+    expect(cat.style.transform).toContain('translate(998px, 696px)'); // 默认右下 @1024x768
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 800 });
+    try {
+      window.dispatchEvent(new Event('resize'));
+      // 右缘 peek x = vw-26，y = vh-72：按缩窗后的视口重算
+      expect(cat.style.transform).toBe('translate(774px, 696px)');
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 });
+    }
+  });
+
+  it('catMode：趴面板期间空闲不入睡（perch 解除 20s idle 定时）', () => {
+    vi.useFakeTimers();
+    try {
+      const { ui } = makeUI();
+      ui.setCatMode(true);
+      ui.showDot(120, 80);
+      ui.showPanel(100, 100, 'm');
+      const cat = ui.host.shadowRoot!.querySelector<HTMLElement>('.cat')!;
+      expect(cat.dataset.perch).toBe('1');
+      vi.advanceTimersByTime(20_000);
+      expect(cat.dataset.state).not.toBe('sleep');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('setCatDock', () => {
@@ -296,6 +327,23 @@ describe('setCatDock', () => {
     ui.setCatDock(null);
     const cat = ui.host.shadowRoot!.querySelector<HTMLElement>('.cat')!;
     expect(cat.style.transform).toContain('translate(998px, 696px)');
+  });
+
+  it('resize 后停靠点按存档比例对新视口重算', () => {
+    const { ui } = makeUI();
+    ui.setCatMode(true);
+    ui.setCatDock({ side: 'left', yRatio: 0.5 });
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 800 });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 600 });
+    try {
+      window.dispatchEvent(new Event('resize'));
+      const cat = ui.host.shadowRoot!.querySelector<HTMLElement>('.cat')!;
+      // 左缘 x 不随宽度变，y 按新视口高度重算：0.5 * 600
+      expect(cat.style.transform).toBe('translate(-18px, 300px)');
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 });
+      Object.defineProperty(window, 'innerHeight', { configurable: true, value: 768 });
+    }
   });
 
   it('猫外出时不重定位,回停靠后落存档点', () => {

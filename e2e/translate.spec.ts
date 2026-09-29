@@ -99,6 +99,29 @@ test('站点开关：写入 disabledSites 后不翻译，刷新后保持', async
   await expect(page.locator(HOST)).toHaveCount(0);
 });
 
+test('黑名单/停用站点不出现猫咪入口，划词也不弹浮窗', async ({ context, extensionId }) => {
+  await seedSettings(context, extensionId, { disabledSites: ['127.0.0.1'], catMode: true });
+  const driver = await openDriver(context, extensionId);
+  const page = await openTestPage(context, driver);
+
+  // 选中正文并派发 mouseup：设置同步路径必须先过黑名单门禁再决定是否展示猫。
+  // 修复前 setCatMode 先于黑名单检查执行，停靠猫会出现在停用站点上
+  await page.evaluate(() => {
+    const p = document.querySelector('article p')!;
+    const range = document.createRange();
+    range.selectNodeContents(p);
+    const sel = window.getSelection()!;
+    sel.removeAllRanges();
+    sel.addRange(range);
+    p.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+  });
+  // 等异步设置同步（两次 storage 读）跑完再断言，确保断言发生在同步逻辑之后
+  await page.waitForTimeout(300);
+  await expect(page.locator(`${SEL} .cat`)).toBeHidden();
+  await expect(page.locator(`${SEL} .dot`)).toBeHidden();
+  await expect(page.locator(`${SEL} .panel`)).toBeHidden();
+});
+
 test('划词翻译：选中文本出现圆钮，点击弹出浮窗显示译文', async ({ context, extensionId }) => {
   const driver = await openDriver(context, extensionId);
   const page = await openTestPage(context, driver);
@@ -121,6 +144,10 @@ test('划词翻译：选中文本出现圆钮，点击弹出浮窗显示译文',
 
   const dot = page.locator(`${SEL} .dot`);
   await expect(dot).toBeVisible({ timeout: 10_000 });
+
+  // 圆钮入场动画 pop-in 120ms、起始帧 translateY(4px)：动画未播完时量位置会恰好差 4px。
+  // 先等动画结束再采样，避免位置断言与动画时序竞态
+  await page.waitForTimeout(150);
 
   // 圆钮贴「选区尾」，而不是 mouseup 的鼠标坐标 (100,100)
   // boundingBox 是视口坐标，expected 同样取视口坐标（不加 scrollX/scrollY）
