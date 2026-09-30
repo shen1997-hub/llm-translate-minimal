@@ -25,6 +25,7 @@ const STREAM_FRAME_GAP_MS = 30;
 // 附带 CORS 头：MV3 service worker 跨域 fetch 在无 host 权限时按 CORS 处理，保证 E2E 不依赖原生授权弹窗
 export function startStubServer(port = STUB_PORT): http.Server {
   const pageHtml = fs.readFileSync(path.resolve('e2e/test-page.html'), 'utf8');
+  const demoHtml = fs.readFileSync(path.resolve('e2e/demo-page.html'), 'utf8');
   const state: StubState = { fail: false, delayMs: 0, holdStream: false, releaseStream: false, bodies: [] };
 
   return http
@@ -45,6 +46,12 @@ export function startStubServer(port = STUB_PORT): http.Server {
       if (url.pathname === '/page') {
         res.writeHead(200, { ...corsHeaders, 'Content-Type': 'text/html; charset=utf-8' });
         res.end(pageHtml);
+        return;
+      }
+
+      if (url.pathname === '/demo') {
+        res.writeHead(200, { ...corsHeaders, 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(demoHtml);
         return;
       }
 
