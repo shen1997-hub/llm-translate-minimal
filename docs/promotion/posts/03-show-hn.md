@@ -10,8 +10,8 @@ Show HN: No-subscription web translation extension powered by your own LLM key
 ## Post body（或首条评论，视发布形式）
 
 I got tired of paying a subscription for web page translation when I already had
-API keys for DeepSeek/GLM, and free-tier models (e.g. SiliconFlow's) turned out to
-be good enough for reading. So I built a minimal extension:
+API keys for DeepSeek/GLM, and free-tier models (SiliconFlow offers several) turned
+out to be good enough for reading. So I built a minimal extension:
 
 - Full-page bilingual translation: detects the article body (nav/sidebars skipped),
   inserts the translation under each paragraph
@@ -31,6 +31,6 @@ Feedback very welcome — especially on the content extraction heuristics.
 ## 首条自评草稿（发布后立即自评）
 
 Backstory: the cat started as a joke — I wanted the selection button to feel less
-like UI chrome and more like a companion. It docks at the screen edge, you can drag
-it around, and it trots to the end of your selection. Happy to share how the drag
-geometry works (clientWidth vs innerWidth was a fun scrollbar bug).
+like UI chrome and more like a companion. It docks at the screen edge, follows your
+selection, and trots to the end of it. Happy to share how the drag geometry works
+(clientWidth vs innerWidth was a fun scrollbar bug).
