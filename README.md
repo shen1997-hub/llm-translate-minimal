@@ -2,6 +2,12 @@
 
 基于大语言模型的网页翻译浏览器扩展：整页双语对照翻译 + 划词翻译浮窗，支持任意 OpenAI 兼容 API（DeepSeek、GLM、OpenAI、Ollama 等）。
 
+![整页双语对照翻译演示](docs/assets/demo-translate.gif)
+
+![划词翻译与猫咪助手演示](docs/assets/demo-cat.gif)
+
+> Minimal LLM web translation extension — bring your own API key or use free models. No subscription.
+
 ## 功能特性
 
 - **整页翻译**：智能识别正文区域（导航/侧边栏不翻），译文插入原段落下，双语对照
