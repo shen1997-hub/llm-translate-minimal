@@ -37,12 +37,16 @@ const test = base.extend<{ context: BrowserContext }>({
     // context 关闭后录像才落盘；按 URL 找出演示页那一路，重命名到 raw/ 根目录
     const demoPage = context.pages().find((p) => p.url().startsWith(DEMO_URL));
     const video = demoPage?.video();
-    await context.close();
-    if (video) {
+    try {
+      await context.close();
+      if (!video) throw new Error(`未找到演示页录像：${safe}`);
       const src = await video.path();
       fs.renameSync(src, path.join(RAW_DIR, `${safe}.webm`));
+    } finally {
+      // 子目录里只剩辅助页（options 页）的录像，无论重命名成功与否都清掉；
+      // context.close() 抛错时也必须走到这里，避免残留垃圾录像
+      fs.rmSync(dir, { recursive: true, force: true });
     }
-    fs.rmSync(dir, { recursive: true, force: true });
   },
 });
 
@@ -94,6 +98,7 @@ test('demo-cat', async ({ context, extensionId }) => {
   await page.waitForTimeout(1400); // jump 动画 420ms + 余量，录全猫跳到选区尾
   await cat.click();
   const panel = page.locator(`${SEL} .panel`);
-  await expect(panel).toContainText('译文', { timeout: 15_000 });
+  // 断言 p3 手写译文的稳定片段：此前用 '译文' 是被手写译文里恰好含「译文」二字蒙对的
+  await expect(panel).toContainText('而浏览器扩展补上的', { timeout: 15_000 });
   await page.waitForTimeout(4500); // 停留展示面板与译文（总时长拉到 8s 以上）
 });

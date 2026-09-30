@@ -25,7 +25,8 @@ const DEMO_MARKER = 'The Quiet Rise of Small Language Models';
 // 演示页「源文前缀 → 中文译文」映射：按**源文内容前缀**匹配，不按 `[i]` 序号——
 // 分批发送时序号每批从 0 重新计，只有内容匹配是稳定的。未收录的段落回退 `译文i`
 // （translate.spec.ts 的流式用例断言该格式，回退逻辑必须原样保留）。
-const DEMO_TRANSLATIONS: [prefix: string, translation: string][] = [
+// 导出给 tests/stub-demo-map.test.ts：映射表与 e2e/demo-page.html 手工同步，靠该单测兜住失配。
+export const DEMO_TRANSLATIONS: [prefix: string, translation: string][] = [
   [
     'The Quiet Rise of Small Language Models',
     '小型语言模型的悄然崛起',
@@ -198,7 +199,8 @@ function collectSegmentSources(user: string | null): Map<number, string> {
   return sources;
 }
 
-function matchDemoTranslation(source: string | undefined): string | undefined {
+// 供 tests/stub-demo-map.test.ts 复用真实匹配逻辑：护栏必须走运行时同一条路径
+export function matchDemoTranslation(source: string | undefined): string | undefined {
   if (!source) return undefined;
   return DEMO_TRANSLATIONS.find(([prefix]) => source.startsWith(prefix))?.[1];
 }

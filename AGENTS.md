@@ -43,7 +43,7 @@ RECORD_DEMO=1 npm run record-demo        # 录制推广演示素材（webm，产
 
 - 注释、UI 文案、提交信息均为中文；提交用中文 conventional commits（`feat:` / `fix:` / `test:` / `docs:`），参照 `git log` 现有风格。
 - 单元测试在 `tests/`，与 `lib/` 模块一一对应命名；jsdom 环境仅需 `tests/setup.ts`（只引入 fake-indexeddb）。
-- e2e 选择器：`[data-llm-translate-host]`（段落译文）、`[data-llm-translate-sel]`（划词浮窗）；设置注入用 `e2e/helpers.ts` 的 `seedSettings()`（经 options 页写 chrome.storage.local）；stub LLM 服务在 `e2e/stub-server.ts`。
+- e2e 选择器：`[data-llm-translate-host]`（段落译文）、`[data-llm-translate-sel]`（划词浮窗）；设置注入用 `e2e/helpers.ts` 的 `seedSettings()`（经 options 页写 chrome.storage.local）；stub LLM 服务在 `e2e/stub-server.ts`，其 `/demo` 演示页返回真实中文（映射表与 `e2e/demo-page.html` 手工同步，`tests/stub-demo-map.test.ts` 护栏）。
 - 功能设计与实施计划存于 `docs/superpowers/specs/`（设计）与 `docs/superpowers/plans/`（按日期命名的实施计划）。**改动某个功能前先读对应 spec/plan**，尤其猫咪助手、划词翻译、双协议这些复杂区域。
 - 运行时依赖仅 idb-keyval + sql.js；新功能优先零依赖实现。
 - `浏览器插件/` 是手工拷贝的构建产物，`error/` 是调试截图（未跟踪），都不是源码，勿在此改功能。
