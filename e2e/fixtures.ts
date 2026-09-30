@@ -5,7 +5,7 @@ import path from 'node:path';
 
 // Playwright 期望的浏览器版本若未下载（本机 CDN 被墙），回退到 ms-playwright 目录里
 // 已存在的最高版本完整版 chromium（headless shell 不支持扩展，必须用完整版 chrome.exe）
-function resolveChromiumExecutable(): string | undefined {
+export function resolveChromiumExecutable(): string | undefined {
   const browsersRoot =
     process.env.PLAYWRIGHT_BROWSERS_PATH ??
     (process.platform === 'win32'

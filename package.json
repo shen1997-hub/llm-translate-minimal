@@ -15,7 +15,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "e2e": "playwright test",
-    "zip": "wxt zip"
+    "zip": "wxt zip",
+    "record-demo": "playwright test e2e/demo-record.spec.ts"
   },
   "dependencies": {
     "idb-keyval": "^6.3.0",

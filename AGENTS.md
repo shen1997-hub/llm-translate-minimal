@@ -13,6 +13,7 @@ npm run e2e          # Playwright：真实 Chromium 加载扩展 + stub LLM 服�
 npm run zip          # 打包发布 zip
 npx vitest run tests/scheduler.test.ts        # 跑单个单测文件
 npx playwright test e2e/cat.spec.ts           # 跑单个 e2e 文件
+RECORD_DEMO=1 npm run record-demo        # 录制推广演示素材（webm，产物在 docs/promotion/raw/）
 ```
 
 - e2e 必须先 `npm run build`（Playwright 加载的是构建产物）。
