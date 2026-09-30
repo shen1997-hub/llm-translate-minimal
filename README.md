@@ -74,7 +74,7 @@ docs/superpowers/   # 设计文档与实施计划
 
 ### 技术栈
 
-TypeScript · [WXT](https://wxt.dev)（MV3）· Vitest + jsdom · Playwright · idb-keyval。运行时依赖仅 idb-keyval + sql.js 两个。
+TypeScript · [WXT](https://wxt.dev)（MV3）· Vitest + jsdom · Playwright。运行时依赖仅 idb-keyval + sql.js 两个。
 
 ## 常见问题
 
